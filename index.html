@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALOCAÇÃO DE TRABALHADORES</title>
+<!--
+  ============================================================================
+  ALOCAÇÃO DE TRABALHADORES — SER.RA — versão ligada ao Supabase (nuvem)
+  ============================================================================
+  Antes de usares, precisas de 2 coisas (ver guia completo enviado no chat):
+
+  1) SUPABASE (base de dados na nuvem, grátis para este volume de dados)
+     - supabase.com > Start your project > New project
+     - SQL Editor > cola e corre o script de criação das tabelas (ver guia)
+     - Settings > API > copia "Project URL" e a chave "anon public"
+     - Cola-as nas variáveis "SUPABASE_URL" e "SUPABASE_ANON_KEY"
+       mais abaixo neste ficheiro, a seguir a <script>.
+
+  2) ALOJAMENTO (para teres um link fixo, acessível de qualquer lado)
+     - Mais simples: cria um repositório no GitHub, adiciona este ficheiro
+       como "index.html", Settings > Pages > ativar a partir do branch main.
+       Ficas com um link tipo https://oteunome.github.io/orepo/
+     - Alternativa sem git: arrasta este ficheiro para app.netlify.com/drop
+       e recebes um link imediato.
+  ============================================================================
+-->
+<style>
+  :root{
+    --paper:#EFEDE6; --surface:#FFFFFF; --ink:#23262B; --ink-soft:#6B6F76;
+    --line:#DBD6C9; --navy:#333333; --navy-ink:#1A1A1A; --amber:#4A4A4A;
+    --c1:#4F8B5B; --c1-bg:#E4EFE6;
+    --c2:#D9A441; --c2-bg:#F8EFDB;
+    --c3:#C1554A; --c3-bg:#F6E1DE;
+    --c4:#4C7EA8; --c4-bg:#E1EBF2;
+    --c5:#2B2B2B; --c5-bg:#E3E3E3;
+    --weekend:#E4E0D4;
+    --radius:10px;
+    font-family:Tahoma,Geneva,Verdana,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);}
+  #app{max-width:1400px;margin:0 auto;padding:0 0 60px;}
+
+  .topbar{background:var(--navy);color:#fff;padding:16px 20px 0;position:sticky;top:0;z-index:40;}
+  .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .brand{display:flex;flex-direction:column;line-height:1.1;}
+  .brand .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#B0B0B0;font-weight:700;}
+  .brand h1{font-size:19px;margin:2px 0 0;font-weight:800;letter-spacing:.01em;}
+  .btn{border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.02em;}
+  .btn-export{background:var(--amber);color:#FFFFFF;}
+  .btn-export:hover{filter:brightness(1.06);}
+  .btn-export:disabled{opacity:.5;cursor:default;}
+
+  .tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin;}
+  .tab{flex:0 0 auto;background:rgba(255,255,255,.08);color:#CFCFCF;border:1px solid rgba(255,255,255,.14);
+       border-radius:8px 8px 0 0;padding:8px 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  .tab.active{background:var(--paper);color:var(--navy);border-color:var(--paper);}
+  .tab.overview{margin-left:auto;}
+  .tab.overview.active{background:var(--amber);color:#FFFFFF;}
+
+  .monthbar{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 0;background:var(--surface);
+            border-bottom:1px solid var(--line);}
+  .monthbar button{background:none;border:1px solid var(--line);border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:15px;color:var(--navy);}
+  .monthbar .label{font-weight:800;font-size:14px;letter-spacing:.03em;text-transform:capitalize;min-width:150px;text-align:center;}
+
+  .obra-title{padding:14px 20px 4px;}
+  .obra-title .code{font-size:11px;font-weight:800;color:var(--amber);letter-spacing:.08em;}
+  .obra-title h2{margin:2px 0 0;font-size:17px;color:var(--navy-ink);}
+
+  .grid-wrap{overflow:auto;margin:12px 20px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);
+             max-height:70vh;}
+  table.grid{border-collapse:separate;border-spacing:0;font-size:12px;}
+  table.grid th,table.grid td{padding:0;}
+  .worker-col{position:sticky;left:0;z-index:5;background:var(--surface);text-align:left;padding:9px 12px !important;
+              font-weight:700;font-size:12.5px;border-right:2px solid var(--line);white-space:nowrap;min-width:118px;}
+  thead .worker-col{z-index:15;background:var(--navy);color:#fff;}
+  thead tr th{position:sticky;top:0;background:var(--navy);color:#fff;z-index:10;border-bottom:1px solid rgba(255,255,255,.15);}
+  .daycol{width:34px;text-align:center;padding:6px 0 !important;font-weight:700;font-size:10.5px;}
+  .daycol .dow{display:block;font-weight:500;font-size:8.5px;color:#B5B5B5;text-transform:uppercase;}
+  .daycol.weekend{background:#202020;}
+  td.daycell{text-align:center;border-right:1px solid #EEEBE3;border-bottom:1px solid #EEEBE3;}
+  td.daycell.weekend{background:var(--weekend);}
+  tr:nth-child(even) .worker-col{background:#FAF9F5;}
+  tr:nth-child(even) td.daycell:not(.weekend){background:#FCFBF8;}
+
+  .stamp{width:30px;height:26px;margin:2px auto;border-radius:6px;border:1.5px solid #D6D6D6;background:#fff;
+         font-weight:800;font-size:10px;cursor:pointer;color:#B0B0B0;display:flex;align-items:center;justify-content:center;
+         transition:transform .08s ease;}
+  .stamp:active{transform:scale(.9);}
+  .stamp.filled{border-color:transparent;color:#fff;}
+  .stamp.s-1DIA{background:var(--c1);}
+  .stamp.s-MEIODIA{background:var(--c2);}
+  .stamp.s-FALTA{background:var(--c3);}
+  .stamp.s-FERIAS{background:var(--c4);}
+  .stamp.s-EXTRA{background:var(--c5);}
+  .stamp.conflict{background:#1A1A1A;color:#fff;animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(26,26,26,.5);}50%{box-shadow:0 0 0 4px rgba(26,26,26,0);}}
+
+  .totals-row td{border-top:2px solid var(--navy);font-weight:800;background:#EDEDED !important;}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;padding:10px 20px 0;font-size:11.5px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  .summary-wrap{margin:16px 20px 0;}
+  .summary-wrap h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 8px;}
+  .summary-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+  .scard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+  .scard .name{font-weight:700;font-size:12.5px;margin-bottom:6px;}
+  .scard .row{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);}
+  .scard .row b{color:var(--ink);font-weight:700;}
+  .scard .row.tot{margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);font-weight:800;color:var(--navy-ink);}
+
+  /* bottom sheet */
+  .overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:none;align-items:flex-end;justify-content:center;z-index:100;}
+  .overlay.open{display:flex;}
+  .sheet{background:var(--surface);width:100%;max-width:420px;border-radius:16px 16px 0 0;padding:18px 18px 22px;
+         box-shadow:0 -6px 24px rgba(0,0,0,.2);}
+  .sheet .hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
+  .sheet .who{font-weight:800;font-size:15px;}
+  .sheet .when{font-size:12px;color:var(--ink-soft);}
+  .sheet-obra{font-size:11px;color:var(--ink-soft);margin-bottom:14px;}
+  .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .opt{border:none;border-radius:10px;padding:16px 8px;color:#fff;font-weight:800;font-size:13.5px;cursor:pointer;}
+  .opt:active{transform:scale(.97);}
+  .opt.o-1DIA{background:var(--c1);} .opt.o-MEIODIA{background:var(--c2);}
+  .opt.o-FALTA{background:var(--c3);} .opt.o-FERIAS{background:var(--c4);}
+  .opt.o-EXTRA{background:var(--c5);grid-column:1 / span 2;}
+  .opt-clear{margin-top:10px;width:100%;background:none;border:1.5px solid var(--line);border-radius:10px;
+             padding:11px;font-weight:700;color:var(--ink-soft);cursor:pointer;}
+
+  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--navy-ink);color:#fff;
+         padding:8px 16px;border-radius:20px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;
+         transition:opacity .25s;z-index:200;}
+  .toast.show{opacity:1;}
+
+  .empty-note{margin:14px 20px;padding:12px 14px;background:#EDEDED;border:1px solid #D0D0D0;border-radius:8px;
+              font-size:12.5px;color:#4A4A4A;}
+  .conflict-note{color:#1A1A1A;font-weight:700;}
+  .config-banner{display:none;background:#1A1A1A;color:#fff;padding:12px 20px;font-size:13px;font-weight:600;text-align:center;}
+  .config-banner.show{display:block;}
+  .config-banner code{background:rgba(255,255,255,.18);padding:1px 5px;border-radius:4px;}
+
+  .manage-sheet{max-width:520px;max-height:82vh;overflow-y:auto;}
+  .manage-sheet h4{margin:16px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);}
+  .manage-note{font-size:11.5px;color:var(--ink-soft);margin:4px 0 0;}
+  .manage-list{display:flex;flex-direction:column;gap:6px;}
+  .manage-item{display:flex;align-items:center;justify-content:space-between;background:#F5F4F0;border:1px solid var(--line);
+               border-radius:8px;padding:8px 10px;font-size:12.5px;}
+  .manage-item .rm{border:none;background:none;color:#9A9A9A;font-weight:800;cursor:pointer;font-size:14px;padding:0 4px;}
+  .manage-item .rm:hover{color:#1A1A1A;}
+  .manage-add{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;}
+  .manage-add input{flex:1 1 120px;border:1px solid var(--line);border-radius:6px;padding:8px 9px;font-size:12.5px;font-family:inherit;}
+  .btn-add{background:var(--navy);color:#fff;flex:0 0 auto;}
+  .btn-manage{background:rgba(255,255,255,.14);color:#fff;}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="config-banner" id="configBanner">
+    ⚠️ Supabase por configurar — os dados NÃO estão a ser guardados. Abre o ficheiro num editor de texto,
+    procura por <code>SUPABASE_URL</code> perto do início do &lt;script&gt; e cola aí a tua configuração
+    (ver instruções enviadas junto com este ficheiro).
+  </div>
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="brand">
+        <span class="eyebrow">SER.RA · Construção</span>
+        <h1>ALOCAÇÃO DE TRABALHADORES</h1>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-manage" id="manageBtn">Gerir obras/trabalhadores</button>
+        <button class="btn btn-export" id="exportBtn">Exportar para Excel</button>
+      </div>
+    </div>
+    <div class="tabs" id="tabs"></div>
+  </div>
+
+  <div class="monthbar">
+    <button id="prevMonth">‹</button>
+    <div class="label" id="monthLabel">—</div>
+    <button id="nextMonth">›</button>
+  </div>
+
+  <div id="content"></div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <div class="hd"><span class="who" id="sheetWho">—</span><span class="when" id="sheetWhen">—</span></div>
+    <div class="sheet-obra" id="sheetObra"></div>
+    <div class="opt-grid">
+      <button class="opt o-1DIA" data-k="1DIA">1 DIA</button>
+      <button class="opt o-MEIODIA" data-k="MEIODIA">1/2 DIA</button>
+      <button class="opt o-FALTA" data-k="FALTA">FALTA</button>
+      <button class="opt o-FERIAS" data-k="FERIAS">FÉRIAS</button>
+      <button class="opt o-EXTRA" data-k="EXTRA">DIA EXTRA (fim de semana / suplementar)</button>
+    </div>
+    <button class="opt-clear" id="clearBtn">Limpar marcação</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="manageOverlay">
+  <div class="sheet manage-sheet">
+    <div class="hd"><span class="who">Gerir obras e trabalhadores</span></div>
+    <p class="manage-note">Remover só tira da lista activa — não apaga presenças já registadas.</p>
+
+    <h4>Obras</h4>
+    <div id="obraList" class="manage-list"></div>
+    <div class="manage-add">
+      <input id="newObraCode" placeholder="Código (ex: P24-09)" />
+      <input id="newObraName" placeholder="Nome da obra" />
+      <button id="addObraBtn" class="btn btn-add">Adicionar obra</button>
+    </div>
+
+    <h4>Trabalhadores</h4>
+    <div id="workerList" class="manage-list"></div>
+    <div class="manage-add">
+      <input id="newWorkerName" placeholder="Nome do trabalhador" />
+      <button id="addWorkerBtn" class="btn btn-add">Adicionar trabalhador</button>
+    </div>
+
+    <button class="opt-clear" id="closeManageBtn" style="margin-top:16px;">Fechar</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ============================================================
+  // 1) CONFIGURAÇÃO DO SUPABASE — cola aqui a tua, ver instruções.
+  //    Supabase > Settings > API > Project URL / anon public key.
+  // ============================================================
+  var SUPABASE_URL = "https://ysuukjbejapdggdzbotgj.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzdXVramJlamFkcGdkemJvdGdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDc4NDIsImV4cCI6MjA5OTE4Mzg0Mn0.eiuoQdFUulpV7uhJ89Zd5BMsUW6qX2q1vnxAhHUUDHU";
+
+  var sb = null, sbReady = false;
+  try{
+    if(SUPABASE_URL.indexOf("COLA_AQUI") === -1){
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      sbReady = true;
+    }
+  }catch(e){ sbReady = false; }
+
+  if(!sbReady){ document.getElementById("configBanner").classList.add("show"); }
+
+  var WORKERS = ["ANTÓNIO","BERNADO","CAPUCHO","DANIEL","DANILO","DANNY","GIOVANNI","MBALA","PATRICK","SULEIMANE"];
+  var OBRAS = [
+    {code:"OB26-02", name:"Moradia Vigias da Arriba — Obras de Conservação"},
+    {code:"OB25-01", name:"Estúdio Pilates Mafra"},
+    {code:"COL21-03", name:"Moradia São João — Estoril"},
+    {code:"P22-03", name:"Ampliação Casal de Cambra"},
+    {code:"P23-06", name:"Casa na Mofina"},
+    {code:"P24-04", name:"Pinhal da Praia 2.0"},
+    {code:"P23-07", name:"Prédio Marques Lésbio"}
+  ];
+  var STATUS = {
+    "1DIA":   {label:"1 DIA",   abbr:"1D", cls:"s-1DIA"},
+    "MEIODIA":{label:"1/2 DIA", abbr:"½",  cls:"s-MEIODIA"},
+    "FALTA":  {label:"FALTA",   abbr:"F",  cls:"s-FALTA"},
+    "FERIAS": {label:"FÉRIAS",  abbr:"Fé", cls:"s-FERIAS"},
+    "EXTRA":  {label:"DIA EXTRA", abbr:"Ex", cls:"s-EXTRA"}
+  };
+  var STATUS_ORDER = ["1DIA","MEIODIA","FALTA","FERIAS","EXTRA"];
+  var STATUS_COLOR_VAR = {"1DIA":"--c1","MEIODIA":"--c2","FALTA":"--c3","FERIAS":"--c4","EXTRA":"--c5"};
+  function emptyCounts(){ return {"1DIA":0,"MEIODIA":0,"FALTA":0,"FERIAS":0,"EXTRA":0}; }
+  var MONTH_NAMES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  var DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+  var today = new Date();
+  var viewYear = today.getFullYear();
+  var viewMonth = today.getMonth(); // 0-11
+  var activeTab = OBRAS[0].code; // or "OVERVIEW"
+  var cache = {}; // key -> {worker:{day:statusKey}}
+  var pendingCell = null; // {worker, day}
+
+  function monthKey(y,m){ return y+"-"+String(m+1).padStart(2,"0"); }
+  function storeKey(obraCode,y,m){ return obraCode+"_"+monthKey(y,m); }
+  function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+
+  async function loadConfig(){
+    if(!sbReady) return;
+    try{
+      var res = await sb.from("config").select("data").eq("key","settings").maybeSingle();
+      if(res.error) throw res.error;
+      if(res.data && res.data.data){
+        var d = res.data.data;
+        if(Array.isArray(d.workers) && d.workers.length) WORKERS = d.workers;
+        if(Array.isArray(d.obras) && d.obras.length) OBRAS = d.obras;
+      } else {
+        await saveConfig();
+      }
+    }catch(e){ /* mantém os valores por omissão desta versão */ }
+  }
+
+  async function saveConfig(){
+    if(!sbReady) return;
+    try{
+      var res = await sb.from("config").upsert({key:"settings", data:{workers:WORKERS, obras:OBRAS}});
+      if(res.error) throw res.error;
+    }catch(e){ showToast("Erro ao guardar configuração"); }
+  }
+
+  function renderManageLists(){
+    var ol = document.getElementById("obraList");
+    ol.innerHTML = OBRAS.map(function(o){
+      return '<div class="manage-item"><span>'+o.code+' — '+o.name+'</span><button class="rm" data-code="'+o.code+'">✕</button></div>';
+    }).join("");
+    Array.prototype.forEach.call(ol.querySelectorAll(".rm"), function(b){
+      b.onclick = function(){ removeObra(b.getAttribute("data-code")); };
+    });
+
+    var wl = document.getElementById("workerList");
+    wl.innerHTML = WORKERS.map(function(w){
+      return '<div class="manage-item"><span>'+w+'</span><button class="rm" data-name="'+w+'">✕</button></div>';
+    }).join("");
+    Array.prototype.forEach.call(wl.querySelectorAll(".rm"), function(b){
+      b.onclick = function(){ removeWorker(b.getAttribute("data-name")); };
+    });
+  }
+
+  async function removeObra(code){
+    OBRAS = OBRAS.filter(function(o){ return o.code!==code; });
+    await saveConfig();
+    renderManageLists();
+    render();
+  }
+  async function removeWorker(name){
+    WORKERS = WORKERS.filter(function(w){ return w!==name; });
+    await saveConfig();
+    renderManageLists();
+    render();
+  }
+
+  function showToast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function(){ t.classList.remove("show"); }, 1600);
+  }
+
+  async function loadMonth(obraCode,y,m){
+    var key = storeKey(obraCode,y,m);
+    if (cache[key]) return cache[key];
+    if(!sbReady){ cache[key] = {}; return cache[key]; }
+    try{
+      var res = await sb.from("presencas").select("data").eq("key",key).maybeSingle();
+      if(res.error) throw res.error;
+      var data = (res.data && res.data.data) ? res.data.data : {};
+      cache[key] = data;
+      return data;
+    }catch(e){
+      cache[key] = {};
+      showToast("Erro a ler dados — verifica a ligação");
+      return cache[key];
+    }
+  }
+
+  async function saveMonth(obraCode,y,m,data){
+    var key = storeKey(obraCode,y,m);
+    cache[key] = data;
+    if(!sbReady){ showToast("Supabase não configurado — não guardado"); return; }
+    try{
+      var res = await sb.from("presencas").upsert({key:key, data:data, updated_at:new Date().toISOString()});
+      if(res.error) throw res.error;
+      showToast("Guardado ✓");
+    }catch(e){
+      showToast("Erro ao guardar — tenta novamente");
+    }
+  }
+
+  function renderTabs(){
+    var el = document.getElementById("tabs");
+    el.innerHTML = "";
+    OBRAS.forEach(function(o){
+      var b = document.createElement("button");
+      b.className = "tab" + (activeTab===o.code ? " active":"");
+      b.textContent = o.code;
+      b.title = o.name;
+      b.onclick = function(){ activeTab=o.code; render(); };
+      el.appendChild(b);
+    });
+    var ov = document.createElement("button");
+    ov.className = "tab overview" + (activeTab==="OVERVIEW" ? " active":"");
+    ov.textContent = "Visão Geral";
+    ov.onclick = function(){ activeTab="OVERVIEW"; render(); };
+    el.appendChild(ov);
+  }
+
+  function renderMonthLabel(){
+    document.getElementById("monthLabel").textContent = MONTH_NAMES[viewMonth]+" "+viewYear;
+  }
+
+  function statusCounts(data, worker){
+    var d = data[worker] || {};
+    var c = emptyCounts();
+    Object.keys(d).forEach(function(day){ if(c[d[day]]!==undefined) c[d[day]]++; });
+    return c;
+  }
+
+  async function renderObraView(obra){
+    var content = document.getElementById("content");
+    content.innerHTML = '<div class="obra-title"><div class="code">'+obra.code+'</div><h2>'+obra.name+'</h2></div>'+
+      legendHtml() + '<div class="grid-wrap" id="gridWrap"><p style="padding:20px;color:var(--ink-soft)">A carregar…</p></div>'+
+      '<div class="summary-wrap"><h3>Totais do mês</h3><div class="summary-cards" id="summaryCards"></div></div>';
+
+    var data = await loadMonth(obra.code, viewYear, viewMonth);
+    var nd = daysInMonth(viewYear, viewMonth);
+    var wrap = document.getElementById("gridWrap");
+    wrap.innerHTML = buildGridTable(data, nd, obra.code);
+    attachStampHandlers(obra.code, data);
+    renderSummaryCards(data);
+  }
+
+  function legendHtml(){
+    return '<div class="legend">' + STATUS_ORDER.map(function(k){
+      return '<span><i style="background:var('+STATUS_COLOR_VAR[k]+')"></i>'+STATUS[k].label+'</span>';
+    }).join("") + '</div>';
+  }
+
+  function buildGridTable(data, nd, obraCode){
+    var h = '<table class="grid"><thead><tr><th class="worker-col">Trabalhador</th>';
+    for(var d=1; d<=nd; d++){
+      var dow = new Date(viewYear, viewMonth, d).getDay();
+      var wknd = (dow===0 || dow===6);
+      h += '<th class="daycol'+(wknd?" weekend":"")+'">'+d+'<span class="dow">'+DOW[dow]+'</span></th>';
+    }
+    h += '</tr></thead><tbody>';
+    WORKERS.forEach(function(w){
+      h += '<tr><td class="worker-col">'+w+'</td>';
+      var wd = data[w] || {};
+      for(var d=1; d<=nd; d++){
+        var dow = new Date(viewYear, viewMonth, d).getDay();
+        var wknd = (dow===0 || dow===6);
+        var st = wd[d];
+        var stampCls = "stamp" + (st ? " filled "+STATUS[st].cls : "");
+        var abbr = st ? STATUS[st].abbr : "";
+        h += '<td class="daycell'+(wknd?" weekend":"")+'"><button class="'+stampCls+'" data-worker="'+w+'" data-day="'+d+'">'+abbr+'</button></td>';
+      }
+      h += '</tr>';
+    });
+    h += '</tbody></table>';
+    return h;
+  }
+
+  function attachStampHandlers(obraCode, data){
+    document.querySelectorAll('.stamp').forEach(function(btn){
+      btn.onclick = function(){
+        openSheet(obraCode, btn.getAttribute('data-worker'), parseInt(btn.getAttribute('data-day'),10));
+      };
+    });
+  }
+
+  function renderSummaryCards(data){
+    var el = document.getElementById("summaryCards");
+    el.innerHTML = WORKERS.map(function(w){
+      var c = statusCounts(data, w);
+      var total = c["1DIA"] + c["MEIODIA"]*0.5 + c["EXTRA"];
+      return '<div class="scard"><div class="name">'+w+'</div>'+
+        '<div class="row"><span>1 dia</span><b>'+c["1DIA"]+'</b></div>'+
+        '<div class="row"><span>1/2 dia</span><b>'+c["MEIODIA"]+'</b></div>'+
+        '<div class="row"><span>Faltas</span><b>'+c["FALTA"]+'</b></div>'+
+        '<div class="row"><span>Férias</span><b>'+c["FERIAS"]+'</b></div>'+
+        '<div class="row"><span>Dias extra</span><b>'+c["EXTRA"]+'</b></div>'+
+        '<div class="row tot"><span>Total dias</span><b>'+total+'</b></div></div>';
+    }).join("");
+  }
+
+  async function renderOverview(){
+    var content = document.getElementById("content");
+    content.innerHTML = '<div class="obra-title"><div class="code">TODAS AS OBRAS</div><h2>Visão Geral do mês</h2></div>'+
+      '<p style="margin:0 20px;font-size:12px;color:var(--ink-soft)">Vermelho a piscar = trabalhador marcado em mais do que uma obra no mesmo dia.</p>'+
+      legendHtml() + '<div class="grid-wrap" id="gridWrap"><p style="padding:20px;color:var(--ink-soft)">A carregar…</p></div>'+
+      '<div class="summary-wrap"><h3>Totais do mês (todas as obras)</h3><div class="summary-cards" id="summaryCards"></div></div>';
+
+    var all = {};
+    for(var i=0;i<OBRAS.length;i++){
+      all[OBRAS[i].code] = await loadMonth(OBRAS[i].code, viewYear, viewMonth);
+    }
+    var nd = daysInMonth(viewYear, viewMonth);
+
+    var h = '<table class="grid"><thead><tr><th class="worker-col">Trabalhador</th>';
+    for(var d=1; d<=nd; d++){
+      var dow = new Date(viewYear, viewMonth, d).getDay();
+      var wknd = (dow===0 || dow===6);
+      h += '<th class="daycol'+(wknd?" weekend":"")+'">'+d+'<span class="dow">'+DOW[dow]+'</span></th>';
+    }
+    h += '</tr></thead><tbody>';
+
+    var overallTotals = {};
+    WORKERS.forEach(function(w){ overallTotals[w] = emptyCounts(); });
+
+    WORKERS.forEach(function(w){
+      h += '<tr><td class="worker-col">'+w+'</td>';
+      for(var d=1; d<=nd; d++){
+        var dow = new Date(viewYear, viewMonth, d).getDay();
+        var wknd = (dow===0 || dow===6);
+        var marks = [];
+        OBRAS.forEach(function(o){
+          var st = (all[o.code][w]||{})[d];
+          if(st){ marks.push({obra:o.code, st:st}); overallTotals[w][st]++; }
+        });
+        var cellHtml;
+        if(marks.length > 1){
+          cellHtml = '<span class="stamp filled conflict" title="'+marks.map(function(m){return m.obra+": "+STATUS[m.st].label;}).join(" | ")+'">!</span>';
+        } else if(marks.length === 1){
+          cellHtml = '<span class="stamp filled '+STATUS[marks[0].st].cls+'" title="'+marks[0].obra+": "+STATUS[marks[0].st].label+'">'+STATUS[marks[0].st].abbr+'</span>';
+        } else {
+          cellHtml = '<span class="stamp"></span>';
+        }
+        h += '<td class="daycell'+(wknd?" weekend":"")+'">'+cellHtml+'</td>';
+      }
+      h += '</tr>';
+    });
+    h += '</tbody></table>';
+    document.getElementById("gridWrap").innerHTML = h;
+
+    var sc = document.getElementById("summaryCards");
+    sc.innerHTML = WORKERS.map(function(w){
+      var c = overallTotals[w];
+      var total = c["1DIA"] + c["MEIODIA"]*0.5 + c["EXTRA"];
+      return '<div class="scard"><div class="name">'+w+'</div>'+
+        '<div class="row"><span>1 dia</span><b>'+c["1DIA"]+'</b></div>'+
+        '<div class="row"><span>1/2 dia</span><b>'+c["MEIODIA"]+'</b></div>'+
+        '<div class="row"><span>Faltas</span><b>'+c["FALTA"]+'</b></div>'+
+        '<div class="row"><span>Férias</span><b>'+c["FERIAS"]+'</b></div>'+
+        '<div class="row"><span>Dias extra</span><b>'+c["EXTRA"]+'</b></div>'+
+        '<div class="row tot"><span>Total dias</span><b>'+total+'</b></div></div>';
+    }).join("");
+  }
+
+  function openSheet(obraCode, worker, day){
+    pendingCell = {obraCode:obraCode, worker:worker, day:day};
+    document.getElementById("sheetWho").textContent = worker;
+    document.getElementById("sheetWhen").textContent = "dia "+day+" de "+MONTH_NAMES[viewMonth];
+    var obra = OBRAS.find(function(o){return o.code===obraCode;});
+    document.getElementById("sheetObra").textContent = obra ? (obra.code+" · "+obra.name) : "";
+    document.getElementById("overlay").classList.add("open");
+  }
+  function closeSheet(){
+    document.getElementById("overlay").classList.remove("open");
+    pendingCell = null;
+  }
+
+  async function setPendingStatus(statusKey){
+    if(!pendingCell) return;
+    var cell = pendingCell; // guardar antes do closeSheet() limpar pendingCell
+    var key = storeKey(cell.obraCode, viewYear, viewMonth);
+    var data = cache[key] || {};
+    if(!data[cell.worker]) data[cell.worker] = {};
+    if(statusKey === null){
+      delete data[cell.worker][cell.day];
+    } else {
+      data[cell.worker][cell.day] = statusKey;
+    }
+    closeSheet();
+    await saveMonth(cell.obraCode, viewYear, viewMonth, data);
+    render();
+  }
+
+  function render(){
+    if(activeTab !== "OVERVIEW" && !OBRAS.some(function(o){return o.code===activeTab;})){
+      activeTab = OBRAS.length ? OBRAS[0].code : "OVERVIEW";
+    }
+    renderTabs();
+    renderMonthLabel();
+    if(activeTab === "OVERVIEW"){ renderOverview(); }
+    else{
+      var obra = OBRAS.find(function(o){return o.code===activeTab;});
+      renderObraView(obra);
+    }
+  }
+
+  document.getElementById("prevMonth").onclick = function(){
+    viewMonth--; if(viewMonth<0){ viewMonth=11; viewYear--; } render();
+  };
+  document.getElementById("nextMonth").onclick = function(){
+    viewMonth++; if(viewMonth>11){ viewMonth=0; viewYear++; } render();
+  };
+  document.getElementById("overlay").onclick = function(e){ if(e.target.id==="overlay") closeSheet(); };
+  document.querySelectorAll(".opt").forEach(function(b){
+    b.onclick = function(){ setPendingStatus(b.getAttribute("data-k")); };
+  });
+  document.getElementById("clearBtn").onclick = function(){ setPendingStatus(null); };
+
+  document.getElementById("manageBtn").onclick = function(){
+    renderManageLists();
+    document.getElementById("manageOverlay").classList.add("open");
+  };
+  document.getElementById("closeManageBtn").onclick = function(){
+    document.getElementById("manageOverlay").classList.remove("open");
+  };
+  document.getElementById("manageOverlay").onclick = function(e){
+    if(e.target.id==="manageOverlay") document.getElementById("manageOverlay").classList.remove("open");
+  };
+  document.getElementById("addObraBtn").onclick = async function(){
+    var code = document.getElementById("newObraCode").value.trim();
+    var name = document.getElementById("newObraName").value.trim();
+    if(!code || !name){ showToast("Preenche código e nome"); return; }
+    if(OBRAS.some(function(o){return o.code===code;})){ showToast("Já existe uma obra com esse código"); return; }
+    OBRAS.push({code:code, name:name});
+    document.getElementById("newObraCode").value = "";
+    document.getElementById("newObraName").value = "";
+    await saveConfig();
+    renderManageLists();
+    render();
+  };
+  document.getElementById("addWorkerBtn").onclick = async function(){
+    var name = document.getElementById("newWorkerName").value.trim().toUpperCase();
+    if(!name){ showToast("Escreve um nome"); return; }
+    if(WORKERS.indexOf(name)!==-1){ showToast("Esse trabalhador já existe"); return; }
+    WORKERS.push(name);
+    document.getElementById("newWorkerName").value = "";
+    await saveConfig();
+    renderManageLists();
+    render();
+  };
+
+  document.getElementById("exportBtn").onclick = async function(){
+    var btn = document.getElementById("exportBtn");
+    btn.disabled = true; btn.textContent = "A gerar…";
+    try{
+      var wb = XLSX.utils.book_new();
+      var nd = daysInMonth(viewYear, viewMonth);
+      var allData = {};
+      for(var i=0;i<OBRAS.length;i++){
+        allData[OBRAS[i].code] = await loadMonth(OBRAS[i].code, viewYear, viewMonth);
+      }
+      OBRAS.forEach(function(o){
+        var data = allData[o.code];
+        var rows = [["Trabalhador"].concat(Array.from({length:nd},function(_,i){return i+1;})).concat(["Dias Completos","1/2 Dias","Faltas","Férias","Dias Extra","Total Dias"])];
+        WORKERS.forEach(function(w){
+          var wd = data[w] || {};
+          var row = [w];
+          var c = emptyCounts();
+          for(var d=1; d<=nd; d++){
+            var st = wd[d];
+            row.push(st ? STATUS[st].label : "");
+            if(st) c[st]++;
+          }
+          row.push(c["1DIA"], c["MEIODIA"], c["FALTA"], c["FERIAS"], c["EXTRA"], c["1DIA"]+c["MEIODIA"]*0.5+c["EXTRA"]);
+          rows.push(row);
+        });
+        var ws = XLSX.utils.aoa_to_sheet(rows);
+        XLSX.utils.book_append_sheet(wb, ws, o.code);
+      });
+      var ovRows = [["Trabalhador"].concat(Array.from({length:nd},function(_,i){return i+1;}))];
+      WORKERS.forEach(function(w){
+        var row = [w];
+        for(var d=1; d<=nd; d++){
+          var marks = [];
+          OBRAS.forEach(function(o){ var st=(allData[o.code][w]||{})[d]; if(st) marks.push(o.code+": "+STATUS[st].label); });
+          row.push(marks.join(" | "));
+        }
+        ovRows.push(row);
+      });
+      var wsOv = XLSX.utils.aoa_to_sheet(ovRows);
+      XLSX.utils.book_append_sheet(wb, wsOv, "Visão Geral");
+      XLSX.writeFile(wb, "Alocacao_Trabalhadores_"+monthKey(viewYear,viewMonth)+".xlsx");
+    } catch(e){
+      showToast("Erro ao exportar");
+    } finally {
+      btn.disabled = false; btn.textContent = "Exportar para Excel";
+    }
+  };
+
+  (async function init(){
+    if(sbReady) await loadConfig();
+    render();
+  })();
+})();
+</script>
+</body>
+</html>
