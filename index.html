@@ -238,10 +238,11 @@
   // 1) CONFIGURAÇÃO DO SUPABASE — cola aqui a tua, ver instruções.
   //    Supabase > Settings > API > Project URL / anon public key.
   // ============================================================
-  var SUPABASE_URL = "https://ysuukjbejapdggdzbotgj.supabase.co";
+  var SUPABASE_URL = "https://ysuukjbejadpgdzbotgj.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzdXVramJlamFkcGdkemJvdGdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM2MDc4NDIsImV4cCI6MjA5OTE4Mzg0Mn0.eiuoQdFUulpV7uhJ89Zd5BMsUW6qX2q1vnxAhHUUDHU";
 
   var sb = null, sbReady = false;
+  var isFileProtocol = (location.protocol === "file:");
   try{
     if(SUPABASE_URL.indexOf("COLA_AQUI") === -1){
       sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -249,7 +250,15 @@
     }
   }catch(e){ sbReady = false; }
 
-  if(!sbReady){ document.getElementById("configBanner").classList.add("show"); }
+  if(isFileProtocol){
+    var fb = document.getElementById("configBanner");
+    fb.innerHTML = "⚠️ Estás a abrir o ficheiro directamente do telemóvel (file://) — a internet fica bloqueada " +
+      "neste modo e por isso nada é guardado, mesmo que pareça funcionar por momentos. Tens de abrir através do " +
+      "link publicado (ex: https://oteunome.github.io/...), não do ficheiro descarregado.";
+    fb.classList.add("show");
+  } else if(!sbReady){
+    document.getElementById("configBanner").classList.add("show");
+  }
 
   var WORKERS = ["ANTÓNIO","BERNADO","CAPUCHO","DANIEL","DANILO","DANNY","GIOVANNI","MBALA","PATRICK","SULEIMANE"];
   var OBRAS = [
@@ -305,7 +314,10 @@
     try{
       var res = await sb.from("config").upsert({key:"settings", data:{workers:WORKERS, obras:OBRAS}});
       if(res.error) throw res.error;
-    }catch(e){ showToast("Erro ao guardar configuração"); }
+    }catch(e){
+      console.error("Erro ao guardar configuração:", e);
+      showToast("Erro ao guardar configuração: " + (e && e.message ? e.message : ""));
+    }
   }
 
   function renderManageLists(){
@@ -359,7 +371,8 @@
       return data;
     }catch(e){
       cache[key] = {};
-      showToast("Erro a ler dados — verifica a ligação");
+      console.error("Erro ao ler:", e);
+      showToast("Erro a ler: " + (e && e.message ? e.message : "verifica a ligação"));
       return cache[key];
     }
   }
@@ -367,13 +380,14 @@
   async function saveMonth(obraCode,y,m,data){
     var key = storeKey(obraCode,y,m);
     cache[key] = data;
-    if(!sbReady){ showToast("Supabase não configurado — não guardado"); return; }
+    if(!sbReady){ showToast(isFileProtocol ? "Abre pelo link publicado — ficheiro local não guarda" : "Supabase não configurado — não guardado"); return; }
     try{
       var res = await sb.from("presencas").upsert({key:key, data:data, updated_at:new Date().toISOString()});
       if(res.error) throw res.error;
       showToast("Guardado ✓");
     }catch(e){
-      showToast("Erro ao guardar — tenta novamente");
+      console.error("Erro ao guardar:", e);
+      showToast("Erro ao guardar: " + (e && e.message ? e.message : "tenta novamente"));
     }
   }
 
