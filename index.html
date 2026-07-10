@@ -183,8 +183,8 @@
 
   <div class="periodbar">
     <div class="mode-toggle">
-      <button id="modeMonth" class="active">Mensal</button>
-      <button id="modeWeek">Semanal</button>
+      <button id="modeWeek" class="active">Semanal</button>
+      <button id="modeMonth">Mensal</button>
     </div>
     <div class="nav-group">
       <button id="prevBtn">‹</button>
@@ -303,7 +303,7 @@
   var DOW = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
   // ---------- datas / período ----------
-  var periodMode = "month"; // "month" | "week"
+  var periodMode = "week"; // "month" | "week" — semanal por defeito
   var anchorDate = new Date();
   anchorDate.setHours(0,0,0,0);
 
@@ -536,6 +536,7 @@
     var oldWrap = document.getElementById("gridWrap");
     var savedLeft = oldWrap ? oldWrap.scrollLeft : 0;
     var savedTop = oldWrap ? oldWrap.scrollTop : 0;
+    var savedPageY = window.scrollY;
 
     var content = document.getElementById("content");
     content.innerHTML = legendHtml() +
@@ -555,6 +556,7 @@
 
     newWrap.scrollLeft = savedLeft;
     newWrap.scrollTop = savedTop;
+    window.scrollTo(0, savedPageY);
   }
 
   // ---------- painel (bottom sheet) ----------
@@ -765,7 +767,11 @@
 
   // ---------- arranque ----------
   var resizeTimer = null;
+  var lastWidth = window.innerWidth;
   function onResize(){
+    var w = window.innerWidth;
+    if(w === lastWidth) return; // altura mudou só (barra de endereço a esconder/mostrar ao fazer scroll) — ignora
+    lastWidth = w;
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function(){ render(); }, 180);
   }
