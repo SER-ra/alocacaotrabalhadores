@@ -57,8 +57,10 @@
              max-height:60vh;}
   table.grid{border-collapse:separate;border-spacing:0;font-size:12px;}
   table.grid th,table.grid td{padding:0;}
+  /* Coluna de trabalhadores: largura única e fixa, sempre — mensal, semanal, qualquer ecrã ou rotação. */
   .worker-col{position:sticky;left:0;z-index:5;background:var(--surface);text-align:left;padding:9px 12px !important;
-              font-weight:700;font-size:12.5px;border-right:2px solid var(--line);white-space:nowrap;min-width:110px;}
+              font-weight:700;font-size:12.5px;border-right:2px solid var(--line);white-space:nowrap;
+              width:104px;min-width:104px;max-width:104px;}
   thead .worker-col{z-index:15;background:var(--navy);color:#fff;}
   thead tr th{position:sticky;top:0;background:var(--navy);color:#fff;z-index:10;border-bottom:1px solid rgba(255,255,255,.15);}
   .daycol{width:50px;text-align:center;padding:6px 2px !important;font-weight:700;font-size:10.5px;}
@@ -80,25 +82,17 @@
   .cell-btn.conflict{border-color:#1A1A1A;animation:pulse 1.2s infinite;}
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(26,26,26,.5);}50%{box-shadow:0 0 0 4px rgba(26,26,26,0);}}
 
-  /* vista semanal: menos colunas, por isso um pouco mais largas — mas mesma altura da mensal */
-  @media (max-width:999px){
-    table.grid.week .daycol{width:auto;min-width:76px;font-size:11.5px;letter-spacing:.02em;}
-    table.grid.week .daycol .dow{font-size:9px;}
-    table.grid.week .worker-col{min-width:120px;font-size:13px;}
-  }
-  table.grid.week .cell-btn{width:100%;min-height:30px;flex-direction:row;border-radius:7px;border-width:2px;}
+  /* vista semanal: os "meios-dias" ficam lado a lado em vez de empilhados (não afecta largura) */
+  table.grid.week .cell-btn{flex-direction:row;border-radius:7px;}
   table.grid.week .cell-half{font-size:8px;}
   table.grid.week .cell-half.empty{font-size:11px;}
 
-  /* Ecrã largo com rato (PC): a tabela ocupa sempre 100% da largura disponível,
-     sem scroll lateral, e mensal/semanal ficam com a mesma largura total. */
-  @media (min-width:1000px) and (hover:hover) and (pointer:fine){
-    .grid-wrap{overflow-x:hidden;}
-    table.grid{width:100%;table-layout:fixed;}
-    table.grid .worker-col{width:140px;min-width:140px;}
-    table.grid .daycol{width:auto;min-width:0;}
-    table.grid .cell-btn{width:100%;}
-  }
+  /* Modo "fill": aplicado via JS quando há espaço real (ecrã largo OU telemóvel em horizontal) —
+     as colunas dos dias esticam para preencher tudo, sem scroll. Sem esta classe, mantém-se o
+     scroll lateral com largura mínima tocável — a coluna de trabalhadores nunca muda em nenhum caso. */
+  table.grid.fill{width:100%;table-layout:fixed;}
+  table.grid.fill .daycol{width:auto;}
+  table.grid.fill .cell-btn{width:100%;}
 
   .summary-wrap{margin:20px 20px 0;}
   .summary-wrap h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 8px;}
@@ -341,6 +335,12 @@
 
   var cache = {}; // ymKey -> {worker:{day:[{obra,status},...]}}
   var pendingWorker = null, pendingDate = null, pendingObra = null;
+  var lastObra = null;
+  try{ lastObra = localStorage.getItem("lastObra"); }catch(e){ lastObra = null; }
+  function setLastObra(code){
+    lastObra = code;
+    try{ localStorage.setItem("lastObra", code); }catch(e){ /* ignora se não disponível */ }
+  }
 
   function showToast(msg){
     var t = document.getElementById("toast");
@@ -452,9 +452,9 @@
     }).join("");
   }
 
-  function buildUnifiedTable(dates){
-    var weekCls = periodMode === "week" ? " week" : "";
-    var h = '<table class="grid'+weekCls+'"><thead><tr><th class="worker-col">Trabalhador</th>';
+  function buildUnifiedTable(dates, fill){
+    var cls = "grid" + (periodMode === "week" ? " week" : "") + (fill ? " fill" : "");
+    var h = '<table class="'+cls+'"><thead><tr><th class="worker-col">Trabalhador</th>';
     dates.forEach(function(d){
       h += '<th class="daycol'+(isWeekend(d)?" weekend":"")+'">'+d.getDate()+'<span class="dow">'+DOW[d.getDay()]+'</span></th>';
     });
@@ -543,12 +543,16 @@
       '<div class="summary-wrap"><h3>Totais por trabalhador</h3><div class="summary-cards" id="workerCards"></div></div>' +
       '<div class="summary-wrap"><h3>Totais por obra</h3><div class="summary-cards" id="obraCards"></div></div>';
 
-    document.getElementById("gridWrap").innerHTML = buildUnifiedTable(dates);
+    var newWrap = document.getElementById("gridWrap");
+    var workerColW = 104;
+    var minDayColW = 40; // mínimo tocável razoável por coluna de dia
+    var available = newWrap.clientWidth || window.innerWidth;
+    var fill = available >= (workerColW + dates.length * minDayColW);
+    newWrap.innerHTML = buildUnifiedTable(dates, fill);
     attachCellHandlers();
     renderWorkerCards(dates);
     renderObraCards(dates);
 
-    var newWrap = document.getElementById("gridWrap");
     newWrap.scrollLeft = savedLeft;
     newWrap.scrollTop = savedTop;
   }
@@ -598,9 +602,10 @@
   function showWarn(msg){ var w=document.getElementById("sheetWarn"); w.textContent=msg; w.classList.add("show"); }
 
   function openSheet(worker, date){
-    pendingWorker = worker; pendingDate = date; pendingObra = null;
+    pendingWorker = worker; pendingDate = date;
     document.getElementById("sheetWho").textContent = worker;
     document.getElementById("sheetWhen").textContent = date.getDate()+" de "+MONTH_NAMES[date.getMonth()];
+    pendingObra = (lastObra && OBRAS.some(function(o){return o.code===lastObra;})) ? lastObra : null;
     renderObraPills();
     renderEntriesList();
     clearWarn();
@@ -625,10 +630,10 @@
     var others = entries.filter(function(e){ return e.obra !== pendingObra; });
     var newArr = others.concat([{obra:pendingObra, status:statusKey}]);
     var ym = setEntriesAndQueueSave(pendingWorker, pendingDate, newArr);
+    if(pendingObra) setLastObra(pendingObra);
     clearWarn();
     await persistMonth(ym);
     renderEntriesList();
-    pendingObra = null;
     renderObraPills();
     render();
   }
@@ -760,6 +765,14 @@
   };
 
   // ---------- arranque ----------
+  var resizeTimer = null;
+  function onResize(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){ render(); }, 180);
+  }
+  window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", onResize);
+
   (async function init(){
     if(sbReady) await loadConfig();
     await render();
