@@ -63,8 +63,11 @@
               width:104px;min-width:104px;max-width:104px;}
   thead .worker-col{z-index:15;background:var(--navy);color:#fff;}
   thead tr th{position:sticky;top:0;background:var(--navy);color:#fff;z-index:10;border-bottom:1px solid rgba(255,255,255,.15);}
-  .daycol{width:50px;text-align:center;padding:6px 2px !important;font-weight:700;font-size:10.5px;}
+  .daycol{width:50px;text-align:center;padding:0 !important;font-weight:700;font-size:10.5px;}
+  .daynote-btn{width:100%;height:100%;background:none;border:none;color:inherit;font:inherit;font-weight:700;
+               cursor:pointer;padding:6px 2px;display:block;}
   .daycol .dow{display:block;font-weight:500;font-size:8.5px;color:#B5B5B5;text-transform:uppercase;}
+  .note-dot{color:#fff;font-size:7px;vertical-align:top;}
   .daycol.weekend{background:#202020;}
   td.daycell{text-align:center;border-right:1px solid #EEEBE3;border-bottom:1px solid #EEEBE3;padding:3px !important;}
   td.daycell.weekend{background:var(--weekend);}
@@ -77,6 +80,7 @@
   .cell-half{flex:1 1 50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;
              font-size:6.6px;letter-spacing:.01em;padding:1px 0;line-height:1.05;}
   .cell-half.empty{color:#B0B0B0;background:#fff;font-size:9px;}
+  .note-mark{opacity:.85;}
   .s-1DIA{background:var(--c1);} .s-MEIODIA{background:var(--c2);} .s-FALTA{background:var(--c3);}
   .s-FERIAS{background:var(--c4);} .s-EXTRA{background:var(--c5);}
   .cell-btn.conflict{border-color:#1A1A1A;animation:pulse 1.2s infinite;}
@@ -105,6 +109,9 @@
   .scard .row.tot{margin-top:4px;padding-top:4px;border-top:1px dashed var(--line);font-weight:800;color:var(--navy-ink);}
   .scard .breakdown{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);}
   .scard .breakdown .row{padding:1px 0;}
+  .scard .row .wv{display:flex;align-items:center;gap:6px;}
+  .scard .row .wv i{font-style:normal;color:#B0B0B0;font-size:9.5px;min-width:52px;text-align:right;}
+  .scard .row .wv i.no-rate{font-style:italic;}
   .scard .empty-hint{font-size:11px;color:#B0B0B0;font-style:italic;}
 
   .overlay{position:fixed;inset:0;background:rgba(20,20,18,.45);display:none;align-items:flex-end;justify-content:center;z-index:100;}
@@ -128,6 +135,9 @@
   .obra-pill{border:1.5px solid var(--line);background:#fff;border-radius:20px;padding:7px 12px;font-size:11.5px;
              font-weight:700;cursor:pointer;font-family:inherit;color:var(--ink);}
   .obra-pill.selected{background:var(--navy);border-color:var(--navy);color:#fff;}
+
+  .note-input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-family:inherit;
+              font-size:12.5px;color:var(--ink);resize:vertical;}
 
   .opt-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
   .opt{border:none;border-radius:10px;padding:14px 8px;color:#fff;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;}
@@ -206,6 +216,9 @@
     <div class="field-label">Obra (não é preciso para Falta/Férias)</div>
     <div class="obra-pills" id="obraPills"></div>
 
+    <div class="field-label">Nota (opcional)</div>
+    <input type="text" id="entryNoteInput" class="note-input" placeholder="ex: consulta médica, pedido do cliente...">
+
     <div class="field-label">Estado</div>
     <div class="opt-grid">
       <button class="opt o-1DIA" data-k="1DIA">1 DIA</button>
@@ -217,6 +230,18 @@
     <div class="sheet-warn" id="sheetWarn"></div>
 
     <button class="opt-clear" id="closeSheetBtn">Fechar</button>
+  </div>
+</div>
+
+<div class="overlay" id="dayNoteOverlay">
+  <div class="sheet">
+    <div class="hd"><span class="who">Nota do dia</span><span class="when" id="dayNoteWhen">—</span></div>
+    <p class="manage-note">Nota geral, sem trabalhador associado — ex: chuva, visita do cliente, feriado.</p>
+    <textarea id="dayNoteText" class="note-input" rows="4" placeholder="Escreve aqui a nota..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="opt-clear" id="dayNoteCancelBtn" style="flex:1;margin-top:0;">Cancelar</button>
+      <button class="btn btn-export" id="dayNoteSaveBtn" style="flex:1;">Guardar</button>
+    </div>
   </div>
 </div>
 
@@ -237,6 +262,7 @@
     <div id="workerList" class="manage-list"></div>
     <div class="manage-add">
       <input id="newWorkerName" placeholder="Nome do trabalhador" />
+      <input id="newWorkerRate" type="number" step="0.01" min="0" placeholder="Valor/dia €" style="max-width:110px;" />
       <button id="addWorkerBtn" class="btn btn-add">Adicionar trabalhador</button>
     </div>
 
@@ -286,6 +312,15 @@
     {code:"P24-04", name:"Pinhal da Praia 2.0"},
     {code:"P23-07", name:"Prédio Marques Lésbio"}
   ];
+  // Valor diário por trabalhador (€) — editável em "Gerir obras/trabalhadores"
+  var RATES = {
+    "ANTÓNIO": 125, "BERNADO": 140, "CAPUCHO": 125, "DANIEL": 110, "DANILO": 125,
+    "DANNY": 125, "GIOVANNI": 95, "MBALA": 95, "PATRICK": 125, "SULEIMANE": 110
+  };
+  function fmtEUR(v){
+    try{ return new Intl.NumberFormat("pt-PT",{style:"currency",currency:"EUR"}).format(v); }
+    catch(e){ return v.toFixed(2)+" €"; }
+  }
   var STATUS = {
     "1DIA":   {label:"1 DIA",   abbr:"1D", cls:"s-1DIA"},
     "MEIODIA":{label:"1/2 DIA", abbr:"½",  cls:"s-MEIODIA"},
@@ -335,6 +370,7 @@
 
   var cache = {}; // ymKey -> {worker:{day:[{obra,status},...]}}
   var pendingWorker = null, pendingDate = null, pendingObra = null;
+  var pendingDayNoteDate = null;
   var lastObra = null;
   try{ lastObra = localStorage.getItem("lastObra"); }catch(e){ lastObra = null; }
   function setLastObra(code){
@@ -360,13 +396,14 @@
         var d = res.data.data;
         if(Array.isArray(d.workers) && d.workers.length) WORKERS = d.workers;
         if(Array.isArray(d.obras) && d.obras.length) OBRAS = d.obras;
+        if(d.rates && typeof d.rates === "object") RATES = d.rates;
       } else { await saveConfig(); }
     }catch(e){ /* mantém valores por omissão */ }
   }
   async function saveConfig(){
     if(!sbReady) return;
     try{
-      var res = await sb.from("config").upsert({key:"settings", data:{workers:WORKERS, obras:OBRAS}});
+      var res = await sb.from("config").upsert({key:"settings", data:{workers:WORKERS, obras:OBRAS, rates:RATES}});
       if(res.error) throw res.error;
     }catch(e){ console.error(e); showToast("Erro ao guardar configuração: "+(e&&e.message?e.message:"")); }
   }
@@ -396,6 +433,25 @@
     var m = cache[ym]; if(!m) return [];
     var w = m[worker]; if(!w) return [];
     var arr = w[dk]; return Array.isArray(arr) ? arr : [];
+  }
+
+  function getDayNote(date){
+    var ym = ymKey(date), dk = dayKeyOf(date);
+    var m = cache[ym]; if(!m || !m.__NOTES__) return "";
+    return m.__NOTES__[dk] || "";
+  }
+  function setDayNoteAndQueueSave(date, text){
+    var ym = ymKey(date), dk = dayKeyOf(date);
+    if(!cache[ym]) cache[ym] = {};
+    if(!cache[ym].__NOTES__) cache[ym].__NOTES__ = {};
+    if(text) cache[ym].__NOTES__[dk] = text;
+    else delete cache[ym].__NOTES__[dk];
+    return ym;
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+    });
   }
 
   async function persistMonth(ym){
@@ -445,10 +501,10 @@
     if(entries.length === 0) return '<div class="cell-half empty">·</div>';
     if(entries.length === 1){
       var e = entries[0];
-      return '<div class="cell-half '+STATUS[e.status].cls+'">'+(e.obra||"—")+'</div>';
+      return '<div class="cell-half '+STATUS[e.status].cls+'">'+(e.obra||"—")+(e.note?' <span class="note-mark">✎</span>':'')+'</div>';
     }
     return entries.slice(0,2).map(function(e){
-      return '<div class="cell-half '+STATUS[e.status].cls+'">'+(e.obra||"—")+'</div>';
+      return '<div class="cell-half '+STATUS[e.status].cls+'">'+(e.obra||"—")+(e.note?' <span class="note-mark">✎</span>':'')+'</div>';
     }).join("");
   }
 
@@ -456,7 +512,11 @@
     var cls = "grid" + (periodMode === "week" ? " week" : "") + (fill ? " fill" : "");
     var h = '<table class="'+cls+'"><thead><tr><th class="worker-col">Trabalhador</th>';
     dates.forEach(function(d){
-      h += '<th class="daycol'+(isWeekend(d)?" weekend":"")+'">'+d.getDate()+'<span class="dow">'+DOW[d.getDay()]+'</span></th>';
+      var hasNote = !!getDayNote(d);
+      h += '<th class="daycol'+(isWeekend(d)?" weekend":"")+'">'+
+           '<button class="daynote-btn" data-date="'+d.toISOString()+'" title="'+(hasNote?"Ver/editar nota do dia":"Adicionar nota do dia")+'">'+
+           d.getDate()+(hasNote?' <span class="note-dot">●</span>':'')+
+           '<span class="dow">'+DOW[d.getDay()]+'</span></button></th>';
     });
     h += '</tr></thead><tbody>';
     WORKERS.forEach(function(w){
@@ -472,6 +532,12 @@
     });
     h += '</tbody></table>';
     return h;
+  }
+
+  function attachDayNoteHandlers(){
+    document.querySelectorAll('.daynote-btn').forEach(function(btn){
+      btn.onclick = function(){ openDayNote(new Date(btn.getAttribute('data-date'))); };
+    });
   }
 
   function attachCellHandlers(){
@@ -505,6 +571,7 @@
     el.innerHTML = OBRAS.map(function(o){
       var perWorker = {};
       var totalObra = 0;
+      var totalCost = 0;
       WORKERS.forEach(function(w){
         var t = 0;
         dates.forEach(function(d){
@@ -515,13 +582,22 @@
             else if(e.status==="EXTRA") t += 1;
           });
         });
-        if(t>0){ perWorker[w]=t; totalObra += t; }
+        if(t>0){
+          perWorker[w]=t; totalObra += t;
+          var rate = RATES[w] || 0;
+          totalCost += t*rate;
+        }
       });
       var rows = Object.keys(perWorker).sort(function(a,b){return perWorker[b]-perWorker[a];})
-        .map(function(w){ return '<div class="row"><span>'+w+'</span><b>'+perWorker[w]+'</b></div>'; }).join("");
+        .map(function(w){
+          var rate = RATES[w];
+          var costTxt = rate ? '<i>'+fmtEUR(perWorker[w]*rate)+'</i>' : '<i class="no-rate">sem valor</i>';
+          return '<div class="row"><span>'+w+'</span><span class="wv"><b>'+perWorker[w]+'</b>'+costTxt+'</span></div>';
+        }).join("");
       return '<div class="scard"><div class="name">'+o.code+'<div class="sub">'+o.name+'</div></div>'+
         (rows ? '<div class="breakdown">'+rows+'</div>' : '<div class="empty-hint">sem dias registados</div>')+
-        '<div class="row tot"><span>Total dias</span><b>'+totalObra+'</b></div></div>';
+        '<div class="row tot"><span>Total Homens</span><b>'+totalObra+'</b></div>'+
+        '<div class="row tot"><span>Total Gasto</span><b>'+fmtEUR(totalCost)+'</b></div></div>';
     }).join("");
   }
 
@@ -551,6 +627,7 @@
     var fill = available >= (workerColW + dates.length * minDayColW);
     newWrap.innerHTML = buildUnifiedTable(dates, fill);
     attachCellHandlers();
+    attachDayNoteHandlers();
     renderWorkerCards(dates);
     renderObraCards(dates);
 
@@ -584,7 +661,9 @@
     }
     el.innerHTML = entries.map(function(e,idx){
       return '<div class="entry-row"><span><span class="tag" style="background:var('+STATUS_COLOR_VAR[e.status]+')"></span>'+
-        (e.obra||"Sem obra")+' — '+STATUS[e.status].label+'</span>'+
+        (e.obra||"Sem obra")+' — '+STATUS[e.status].label+
+        (e.note ? '<br><i style="color:var(--ink-soft);font-size:10.5px;">"'+escapeHtml(e.note)+'"</i>' : '')+
+        '</span>'+
         '<button class="rm" data-idx="'+idx+'">✕</button></div>';
     }).join("");
     el.querySelectorAll(".rm").forEach(function(b){
@@ -608,6 +687,7 @@
     document.getElementById("sheetWho").textContent = worker;
     document.getElementById("sheetWhen").textContent = date.getDate()+" de "+MONTH_NAMES[date.getMonth()];
     pendingObra = (lastObra && OBRAS.some(function(o){return o.code===lastObra;})) ? lastObra : null;
+    document.getElementById("entryNoteInput").value = "";
     renderObraPills();
     renderEntriesList();
     clearWarn();
@@ -629,8 +709,11 @@
     var check = canSet(entries, pendingObra, statusKey);
     if(!check.ok){ showWarn("Não é possível: " + check.reason + "."); return; }
 
+    var noteVal = document.getElementById("entryNoteInput").value.trim();
+    var newEntry = {obra:pendingObra, status:statusKey};
+    if(noteVal) newEntry.note = noteVal;
     var others = entries.filter(function(e){ return e.obra !== pendingObra; });
-    var newArr = others.concat([{obra:pendingObra, status:statusKey}]);
+    var newArr = others.concat([newEntry]);
     var ym = setEntriesAndQueueSave(pendingWorker, pendingDate, newArr);
     if(pendingObra) setLastObra(pendingObra);
     clearWarn();
@@ -638,6 +721,27 @@
     closeSheet();
     render();
   }
+
+  function openDayNote(date){
+    pendingDayNoteDate = date;
+    document.getElementById("dayNoteWhen").textContent = date.getDate()+" de "+MONTH_NAMES[date.getMonth()];
+    document.getElementById("dayNoteText").value = getDayNote(date);
+    document.getElementById("dayNoteOverlay").classList.add("open");
+  }
+  function closeDayNote(){
+    document.getElementById("dayNoteOverlay").classList.remove("open");
+    pendingDayNoteDate = null;
+  }
+  document.getElementById("dayNoteCancelBtn").onclick = closeDayNote;
+  document.getElementById("dayNoteOverlay").onclick = function(e){ if(e.target.id==="dayNoteOverlay") closeDayNote(); };
+  document.getElementById("dayNoteSaveBtn").onclick = async function(){
+    if(!pendingDayNoteDate) return;
+    var text = document.getElementById("dayNoteText").value.trim();
+    var ym = setDayNoteAndQueueSave(pendingDayNoteDate, text);
+    closeDayNote();
+    await persistMonth(ym);
+    render();
+  };
 
   // ---------- gestão de obras/trabalhadores ----------
   function renderManageLists(){
@@ -649,9 +753,22 @@
 
     var wl = document.getElementById("workerList");
     wl.innerHTML = WORKERS.map(function(w){
-      return '<div class="manage-item"><span>'+w+'</span><button class="rm" data-name="'+w+'">✕</button></div>';
+      var rate = RATES[w] || "";
+      return '<div class="manage-item"><span>'+w+'</span>'+
+        '<span style="display:flex;align-items:center;gap:6px;">'+
+        '<input type="number" step="0.01" min="0" class="rate-edit" data-name="'+w+'" value="'+rate+'" placeholder="€/dia" style="width:80px;">'+
+        '<button class="rm" data-name="'+w+'">✕</button></span></div>';
     }).join("");
     wl.querySelectorAll(".rm").forEach(function(b){ b.onclick=function(){ removeWorker(b.getAttribute("data-name")); }; });
+    wl.querySelectorAll(".rate-edit").forEach(function(inp){
+      inp.onchange = async function(){
+        var name = inp.getAttribute("data-name");
+        var v = parseFloat(inp.value);
+        RATES[name] = isNaN(v) ? 0 : v;
+        await saveConfig();
+        render();
+      };
+    });
   }
   async function removeObra(code){
     OBRAS = OBRAS.filter(function(o){ return o.code!==code; });
@@ -659,6 +776,7 @@
   }
   async function removeWorker(name){
     WORKERS = WORKERS.filter(function(w){ return w!==name; });
+    delete RATES[name];
     await saveConfig(); renderManageLists(); render();
   }
 
@@ -686,8 +804,11 @@
     var name = document.getElementById("newWorkerName").value.trim().toUpperCase();
     if(!name){ showToast("Escreve um nome"); return; }
     if(WORKERS.indexOf(name)!==-1){ showToast("Esse trabalhador já existe"); return; }
+    var rateVal = parseFloat(document.getElementById("newWorkerRate").value);
     WORKERS.push(name);
+    RATES[name] = isNaN(rateVal) ? 0 : rateVal;
     document.getElementById("newWorkerName").value = "";
+    document.getElementById("newWorkerRate").value = "";
     await saveConfig(); renderManageLists(); render();
   };
 
@@ -723,7 +844,9 @@
         var row = [w];
         dates.forEach(function(d){
           var entries = getEntries(w,d);
-          row.push(entries.map(function(e){ return (e.obra||"—")+": "+STATUS[e.status].label; }).join(" | "));
+          row.push(entries.map(function(e){
+            return (e.obra||"—")+": "+STATUS[e.status].label+(e.note?" ["+e.note+"]":"");
+          }).join(" | "));
         });
         detRows.push(row);
       });
@@ -737,10 +860,11 @@
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wRows), "Resumo por Trabalhador");
 
-      var oRows = [["Obra","Nome"].concat(WORKERS).concat(["Total"])];
+      var oRows = [["Obra","Nome"].concat(WORKERS).concat(["Total Homens","Total Gasto (€)"])];
       OBRAS.forEach(function(o){
         var row = [o.code, o.name];
         var tot = 0;
+        var cost = 0;
         WORKERS.forEach(function(w){
           var t = 0;
           dates.forEach(function(d){
@@ -749,12 +873,19 @@
               if(e.status==="1DIA") t+=1; else if(e.status==="MEIODIA") t+=0.5; else if(e.status==="EXTRA") t+=1;
             });
           });
-          row.push(t); tot += t;
+          row.push(t); tot += t; cost += t*(RATES[w]||0);
         });
-        row.push(tot);
+        row.push(tot, Number(cost.toFixed(2)));
         oRows.push(row);
       });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(oRows), "Resumo por Obra");
+
+      var nRows = [["Dia","Nota"]];
+      dates.forEach(function(d){
+        var note = getDayNote(d);
+        if(note) nRows.push([d.getDate()+"/"+(d.getMonth()+1), note]);
+      });
+      if(nRows.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(nRows), "Notas do Dia");
 
       XLSX.writeFile(wb, "Alocacao_Trabalhadores_"+ymKey(dates[0])+".xlsx");
     } catch(e){
