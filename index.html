@@ -633,8 +633,7 @@
     if(pendingObra) setLastObra(pendingObra);
     clearWarn();
     await persistMonth(ym);
-    renderEntriesList();
-    renderObraPills();
+    closeSheet();
     render();
   }
 
