@@ -168,16 +168,37 @@
          transition:opacity .25s;z-index:200;max-width:88vw;text-align:center;}
   .toast.show{opacity:1;}
 
-  .config-banner{display:none;background:#1A1A1A;color:#fff;padding:12px 20px;font-size:13px;font-weight:600;text-align:center;}
+  .config-banner{display:none;background:#1A1A1A;color:#fff;padding:12px 20px;font-size:13px;font-weight:600;text-align:center;
+                 position:fixed;top:0;left:0;right:0;z-index:600;}
   .config-banner.show{display:block;}
   .config-banner code{background:rgba(255,255,255,.18);padding:1px 5px;border-radius:4px;}
+
+  .login-screen{position:fixed;inset:0;background:var(--navy);display:flex;align-items:center;justify-content:center;
+                padding:20px;z-index:500;}
+  .login-screen.hidden{display:none;}
+  .login-card{background:var(--surface);border-radius:14px;padding:28px 26px;max-width:340px;width:100%;
+              box-shadow:0 10px 40px rgba(0,0,0,.3);}
 </style>
 </head>
 <body>
 
-<div id="app">
-  <div class="config-banner" id="configBanner"></div>
+<div class="config-banner" id="configBanner"></div>
 
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <span class="eyebrow" style="color:var(--ink-soft);">SER.RA · Construção</span>
+    <h1 style="margin:2px 0 18px;font-size:19px;">ALOCAÇÃO DE TRABALHADORES</h1>
+    <div class="field-label" style="margin-top:0;">Email</div>
+    <input type="email" id="loginEmail" class="note-input" autocomplete="username">
+    <div class="field-label">Palavra-passe</div>
+    <input type="password" id="loginPassword" class="note-input" autocomplete="current-password">
+    <div class="sheet-warn" id="loginWarn"></div>
+    <button class="btn btn-export" id="loginBtn" style="width:100%;margin-top:14px;padding:12px;">Entrar</button>
+    <p style="font-size:11px;color:var(--ink-soft);margin-top:14px;">Acesso restrito à equipa SER.RA. Pede as credenciais a quem geriu a configuração.</p>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
   <div class="topbar">
     <div class="topbar-row">
       <div class="brand">
@@ -187,6 +208,7 @@
       <div style="display:flex;gap:8px;">
         <button class="btn btn-manage" id="manageBtn">Gerir obras/trabalhadores</button>
         <button class="btn btn-export" id="exportBtn">Exportar para Excel</button>
+        <button class="btn btn-manage" id="logoutBtn" title="Sair">Sair</button>
       </div>
     </div>
   </div>
@@ -896,6 +918,47 @@
     }
   };
 
+  // ---------- autenticação ----------
+  async function showApp(){
+    document.getElementById("loginScreen").classList.add("hidden");
+    document.getElementById("app").style.display = "";
+    if(sbReady) await loadConfig();
+    await render();
+  }
+  function showLogin(msg){
+    document.getElementById("app").style.display = "none";
+    document.getElementById("loginScreen").classList.remove("hidden");
+    if(msg){
+      var w = document.getElementById("loginWarn");
+      w.textContent = msg; w.classList.add("show");
+    }
+  }
+  document.getElementById("loginBtn").onclick = async function(){
+    if(!sbReady){ showToast("Supabase não configurado"); return; }
+    var email = document.getElementById("loginEmail").value.trim();
+    var password = document.getElementById("loginPassword").value;
+    var w = document.getElementById("loginWarn");
+    w.classList.remove("show"); w.textContent = "";
+    if(!email || !password){ w.textContent = "Preenche email e palavra-passe."; w.classList.add("show"); return; }
+    var btn = document.getElementById("loginBtn");
+    btn.disabled = true; btn.textContent = "A entrar…";
+    try{
+      var res = await sb.auth.signInWithPassword({email:email, password:password});
+      if(res.error) throw res.error;
+      document.getElementById("loginPassword").value = "";
+      await showApp();
+    }catch(e){
+      w.textContent = "Não foi possível entrar: " + (e && e.message ? e.message : "verifica as credenciais");
+      w.classList.add("show");
+    } finally {
+      btn.disabled = false; btn.textContent = "Entrar";
+    }
+  };
+  document.getElementById("logoutBtn").onclick = async function(){
+    if(sbReady) await sb.auth.signOut();
+    showLogin();
+  };
+
   // ---------- arranque ----------
   var resizeTimer = null;
   var lastWidth = window.innerWidth;
@@ -910,8 +973,15 @@
   window.addEventListener("orientationchange", onResize);
 
   (async function init(){
-    if(sbReady) await loadConfig();
-    await render();
+    if(!sbReady){ showLogin(); return; }
+    try{
+      var res = await sb.auth.getSession();
+      if(res.data && res.data.session){ await showApp(); }
+      else{ showLogin(); }
+    }catch(e){ showLogin(); }
+    sb.auth.onAuthStateChange(function(event, session){
+      if(event === "SIGNED_OUT"){ showLogin(); }
+    });
   })();
 })();
 </script>
