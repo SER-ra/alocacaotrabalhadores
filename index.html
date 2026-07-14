@@ -207,6 +207,7 @@
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-manage" id="manageBtn">Gerir obras/trabalhadores</button>
+        <button class="btn btn-manage" id="paymentsBtn">Adiantamentos</button>
         <button class="btn btn-export" id="exportBtn">Exportar para Excel</button>
         <button class="btn btn-manage" id="logoutBtn" title="Sair">Sair</button>
       </div>
@@ -267,6 +268,30 @@
   </div>
 </div>
 
+<div class="overlay" id="paymentsOverlay">
+  <div class="sheet manage-sheet">
+    <div class="hd"><span class="who">Adiantamentos e Pagamentos</span><span class="when" id="paymentsMonthLabel">—</span></div>
+    <p class="manage-note">Isto refere-se sempre ao mês inteiro, independentemente da vista mensal/semanal da tabela.</p>
+
+    <h4>Novo adiantamento</h4>
+    <div class="field-label">Trabalhador</div>
+    <div class="obra-pills" id="advWorkerPills"></div>
+    <div class="field-label">Data</div>
+    <input type="date" id="advDate" class="note-input">
+    <div class="field-label">Valor (€)</div>
+    <input type="number" step="0.01" min="0" id="advAmount" class="note-input" placeholder="ex: 100">
+    <div class="field-label">Nota (opcional)</div>
+    <input type="text" id="advNote" class="note-input" placeholder="ex: pedido para despesas médicas">
+    <div class="sheet-warn" id="advWarn"></div>
+    <button class="btn btn-export" id="advAddBtn" style="width:100%;margin-top:10px;">Adicionar adiantamento</button>
+
+    <h4>Resumo do mês</h4>
+    <div class="summary-cards" id="paymentsSummary"></div>
+
+    <button class="opt-clear" id="closePaymentsBtn" style="margin-top:16px;">Fechar</button>
+  </div>
+</div>
+
 <div class="overlay" id="manageOverlay">
   <div class="sheet manage-sheet">
     <div class="hd"><span class="who">Gerir obras e trabalhadores</span></div>
@@ -323,6 +348,14 @@
   } else if(!sbReady){
     document.getElementById("configBanner").classList.add("show");
   }
+  function adjustBannerSpace(){
+    var fb = document.getElementById("configBanner");
+    var h = fb.classList.contains("show") ? fb.offsetHeight : 0;
+    document.body.style.paddingTop = h + "px";
+  }
+  window.addEventListener("load", adjustBannerSpace);
+  window.addEventListener("resize", adjustBannerSpace);
+  setTimeout(adjustBannerSpace, 0);
 
   var WORKERS = ["ANTÓNIO","BERNADO","CAPUCHO","DANIEL","DANILO","DANNY","GIOVANNI","MBALA","PATRICK","SULEIMANE"];
   var OBRAS = [
@@ -461,6 +494,28 @@
     var ym = ymKey(date), dk = dayKeyOf(date);
     var m = cache[ym]; if(!m || !m.__NOTES__) return "";
     return m.__NOTES__[dk] || "";
+  }
+
+  function getAdvances(ym, worker){
+    var m = cache[ym];
+    if(!m || !m.__ADVANCES__ || !m.__ADVANCES__[worker]) return [];
+    return m.__ADVANCES__[worker];
+  }
+  function addAdvanceAndQueueSave(ym, worker, day, amount, note){
+    if(!cache[ym]) cache[ym] = {};
+    if(!cache[ym].__ADVANCES__) cache[ym].__ADVANCES__ = {};
+    if(!cache[ym].__ADVANCES__[worker]) cache[ym].__ADVANCES__[worker] = [];
+    cache[ym].__ADVANCES__[worker].push({day:day, amount:amount, note:note||""});
+    return ym;
+  }
+  function removeAdvanceAndQueueSave(ym, worker, idx){
+    if(cache[ym] && cache[ym].__ADVANCES__ && cache[ym].__ADVANCES__[worker]){
+      cache[ym].__ADVANCES__[worker].splice(idx,1);
+    }
+    return ym;
+  }
+  function totalAdvances(ym, worker){
+    return getAdvances(ym, worker).reduce(function(s,a){ return s+a.amount; }, 0);
   }
   function setDayNoteAndQueueSave(date, text){
     var ym = ymKey(date), dk = dayKeyOf(date);
@@ -623,6 +678,7 @@
     }).join("");
   }
 
+  var lastRenderedMode = null;
   async function render(){
     var dates = currentDates();
     await ensureMonthsLoaded(dates);
@@ -631,10 +687,11 @@
     document.getElementById("modeWeek").className = periodMode==="week" ? "active" : "";
     document.getElementById("periodLabel").textContent = periodLabel();
 
+    var sameMode = (lastRenderedMode === periodMode);
     var oldWrap = document.getElementById("gridWrap");
-    var savedLeft = oldWrap ? oldWrap.scrollLeft : 0;
-    var savedTop = oldWrap ? oldWrap.scrollTop : 0;
-    var savedPageY = window.scrollY;
+    var savedLeft = (sameMode && oldWrap) ? oldWrap.scrollLeft : 0;
+    var savedTop = (sameMode && oldWrap) ? oldWrap.scrollTop : 0;
+    var savedPageY = sameMode ? window.scrollY : 0;
 
     var content = document.getElementById("content");
     content.innerHTML = legendHtml() +
@@ -656,6 +713,7 @@
     newWrap.scrollLeft = savedLeft;
     newWrap.scrollTop = savedTop;
     window.scrollTo(0, savedPageY);
+    lastRenderedMode = periodMode;
   }
 
   // ---------- painel (bottom sheet) ----------
@@ -763,6 +821,96 @@
     closeDayNote();
     await persistMonth(ym);
     render();
+  };
+
+  // ---------- adiantamentos e pagamentos ----------
+  var pendingAdvWorker = null;
+
+  function renderAdvWorkerPills(){
+    var el = document.getElementById("advWorkerPills");
+    el.innerHTML = WORKERS.map(function(w){
+      return '<button type="button" class="obra-pill'+(pendingAdvWorker===w?" selected":"")+'" data-name="'+w+'">'+w+'</button>';
+    }).join("");
+    el.querySelectorAll(".obra-pill").forEach(function(b){
+      b.onclick = function(){ pendingAdvWorker = b.getAttribute("data-name"); renderAdvWorkerPills(); };
+    });
+  }
+
+  function renderPaymentsSummary(){
+    var ym = ymKey(anchorDate);
+    var monthDates = getDatesForMonth(anchorDate.getFullYear(), anchorDate.getMonth());
+    var el = document.getElementById("paymentsSummary");
+    el.innerHTML = WORKERS.map(function(w){
+      var days = 0;
+      monthDates.forEach(function(d){
+        getEntries(w,d).forEach(function(e){
+          if(e.status==="1DIA") days+=1; else if(e.status==="MEIODIA") days+=0.5; else if(e.status==="EXTRA") days+=1;
+        });
+      });
+      var rate = RATES[w];
+      var earned = rate ? days*rate : null;
+      var advances = getAdvances(ym, w);
+      var advTotal = totalAdvances(ym, w);
+      var advRows = advances.map(function(a,idx){
+        return '<div class="entry-row"><span>dia '+a.day+' — '+fmtEUR(a.amount)+(a.note?' <i>('+escapeHtml(a.note)+')</i>':'')+'</span>'+
+          '<button class="rm" data-w="'+w+'" data-idx="'+idx+'">✕</button></div>';
+      }).join("");
+      var net = (earned!==null) ? (earned - advTotal) : null;
+      return '<div class="scard"><div class="name">'+w+'</div>'+
+        '<div class="row"><span>Dias no mês</span><b>'+days+'</b></div>'+
+        '<div class="row"><span>Valor ganho</span><b>'+(earned!==null?fmtEUR(earned):"sem valor definido")+'</b></div>'+
+        '<div class="row"><span>Adiantado</span><b>'+fmtEUR(advTotal)+'</b></div>'+
+        (advRows ? '<div class="breakdown">'+advRows+'</div>' : '')+
+        '<div class="row tot"><span>A pagar</span><b>'+(net!==null?fmtEUR(net):"—")+'</b></div></div>';
+    }).join("");
+    el.querySelectorAll(".rm").forEach(function(b){
+      b.onclick = async function(){
+        var w = b.getAttribute("data-w");
+        var idx = parseInt(b.getAttribute("data-idx"),10);
+        var ymm = removeAdvanceAndQueueSave(ymKey(anchorDate), w, idx);
+        await persistMonth(ymm);
+        renderPaymentsSummary();
+      };
+    });
+  }
+
+  async function openPayments(){
+    var monthDates = getDatesForMonth(anchorDate.getFullYear(), anchorDate.getMonth());
+    await ensureMonthsLoaded(monthDates);
+    document.getElementById("paymentsMonthLabel").textContent = MONTH_NAMES[anchorDate.getMonth()]+" "+anchorDate.getFullYear();
+    pendingAdvWorker = null;
+    document.getElementById("advDate").value = new Date().toISOString().slice(0,10);
+    document.getElementById("advAmount").value = "";
+    document.getElementById("advNote").value = "";
+    document.getElementById("advWarn").classList.remove("show");
+    renderAdvWorkerPills();
+    renderPaymentsSummary();
+    document.getElementById("paymentsOverlay").classList.add("open");
+  }
+  function closePayments(){
+    document.getElementById("paymentsOverlay").classList.remove("open");
+  }
+  document.getElementById("paymentsBtn").onclick = openPayments;
+  document.getElementById("closePaymentsBtn").onclick = closePayments;
+  document.getElementById("paymentsOverlay").onclick = function(e){ if(e.target.id==="paymentsOverlay") closePayments(); };
+
+  document.getElementById("advAddBtn").onclick = async function(){
+    var w = document.getElementById("advWarn");
+    w.classList.remove("show");
+    if(!pendingAdvWorker){ w.textContent = "Escolhe o trabalhador."; w.classList.add("show"); return; }
+    var dateVal = document.getElementById("advDate").value;
+    if(!dateVal){ w.textContent = "Escolhe a data."; w.classList.add("show"); return; }
+    var amount = parseFloat(document.getElementById("advAmount").value);
+    if(!amount || amount<=0){ w.textContent = "Escreve um valor válido."; w.classList.add("show"); return; }
+    var note = document.getElementById("advNote").value.trim();
+    var d = new Date(dateVal+"T00:00:00");
+    await ensureMonthsLoaded([d]);
+    var ymm = addAdvanceAndQueueSave(ymKey(d), pendingAdvWorker, dayKeyOf(d), amount, note);
+    await persistMonth(ymm);
+    document.getElementById("advAmount").value = "";
+    document.getElementById("advNote").value = "";
+    showToast("Adiantamento registado ✓");
+    renderPaymentsSummary();
   };
 
   // ---------- gestão de obras/trabalhadores ----------
@@ -908,6 +1056,32 @@
         if(note) nRows.push([d.getDate()+"/"+(d.getMonth()+1), note]);
       });
       if(nRows.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(nRows), "Notas do Dia");
+
+      var monthDates = getDatesForMonth(anchorDate.getFullYear(), anchorDate.getMonth());
+      await ensureMonthsLoaded(monthDates);
+      var ymAnchor = ymKey(anchorDate);
+      var pRows = [["Trabalhador","Dias no Mês","Valor Ganho (€)","Adiantado (€)","A Pagar (€)"]];
+      WORKERS.forEach(function(w){
+        var days = 0;
+        monthDates.forEach(function(d){
+          getEntries(w,d).forEach(function(e){
+            if(e.status==="1DIA") days+=1; else if(e.status==="MEIODIA") days+=0.5; else if(e.status==="EXTRA") days+=1;
+          });
+        });
+        var rate = RATES[w];
+        var earned = rate ? days*rate : 0;
+        var adv = totalAdvances(ymAnchor, w);
+        pRows.push([w, days, Number(earned.toFixed(2)), Number(adv.toFixed(2)), Number((earned-adv).toFixed(2))]);
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pRows), "Pagamentos ("+MONTH_ABBR[anchorDate.getMonth()]+")");
+
+      var aRows = [["Trabalhador","Dia","Valor (€)","Nota"]];
+      WORKERS.forEach(function(w){
+        getAdvances(ymAnchor, w).forEach(function(a){
+          aRows.push([w, a.day+"/"+(anchorDate.getMonth()+1), a.amount, a.note||""]);
+        });
+      });
+      if(aRows.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aRows), "Adiantamentos");
 
       XLSX.writeFile(wb, "Alocacao_Trabalhadores_"+ymKey(dates[0])+".xlsx");
     } catch(e){
