@@ -36,6 +36,7 @@
   @media (max-width:520px){
     .topbar-row{flex-direction:column;align-items:stretch;}
     .topbar-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;}
+    .topbar-actions .btn:last-child{grid-column:1 / -1;}
     .topbar-actions .btn{padding:9px 6px;font-size:12px;}
   }
 
@@ -225,6 +226,7 @@
       <div class="topbar-actions">
         <button class="btn btn-manage" id="manageBtn" title="Gerir obras/trabalhadores">Gerir</button>
         <button class="btn btn-manage" id="paymentsBtn" title="Adiantamentos">Adiantamentos</button>
+        <button class="btn btn-manage" id="payrollBtn" title="Ficha de vencimentos (referência)">Vencimentos</button>
         <button class="btn btn-export" id="exportBtn" title="Exportar para Excel">Exportar</button>
         <button class="btn btn-manage" id="logoutBtn" title="Sair">Sair</button>
       </div>
@@ -306,6 +308,15 @@
     <div class="summary-cards" id="paymentsSummary"></div>
 
     <button class="opt-clear" id="closePaymentsBtn" style="margin-top:16px;">Fechar</button>
+  </div>
+</div>
+
+<div class="overlay" id="payrollOverlay">
+  <div class="sheet manage-sheet" style="max-width:640px;">
+    <div class="hd"><span class="who">Ficha de Vencimentos</span></div>
+    <p class="manage-note">Só de referência — dados vindos da tabela "trabalhadores" (a mesma da Ficha de Vencimentos separada). Nada aqui é editável nem entra em cálculos da app de presenças, para já.</p>
+    <div class="summary-cards" id="payrollCards" style="margin-top:12px;"></div>
+    <button class="opt-clear" id="closePayrollBtn" style="margin-top:16px;">Fechar</button>
   </div>
 </div>
 
@@ -975,6 +986,54 @@
   document.getElementById("paymentsBtn").onclick = openPayments;
   document.getElementById("closePaymentsBtn").onclick = closePayments;
   document.getElementById("paymentsOverlay").onclick = function(e){ if(e.target.id==="paymentsOverlay") closePayments(); };
+
+  // ---------- ficha de vencimentos (referência, só leitura) ----------
+  function fmtPct(v){ return (v===null || v===undefined) ? "—" : (Number(v)*100).toFixed(2).replace(".", ",")+"%"; }
+  function fmtEUR0(v){ return (v===null || v===undefined) ? "—" : fmtEUR(Number(v)); }
+
+  async function openPayroll(){
+    var el = document.getElementById("payrollCards");
+    el.innerHTML = '<p style="color:var(--ink-soft);font-size:12px;">A carregar…</p>';
+    document.getElementById("payrollOverlay").classList.add("open");
+    if(!sbReady){ el.innerHTML = '<p style="color:var(--ink-soft);font-size:12px;">Supabase não configurado.</p>'; return; }
+    try{
+      var res = await sb.from("trabalhadores").select("*").order("nome");
+      if(res.error) throw res.error;
+      var rows = res.data || [];
+      if(rows.length === 0){ el.innerHTML = '<p style="color:var(--ink-soft);font-size:12px;">Ainda sem dados na tabela "trabalhadores".</p>'; return; }
+      el.innerHTML = rows.map(function(r){
+        return '<div class="scard"' + (r.ativo===false ? ' style="opacity:.55;"' : '') + '>' +
+          '<div class="name">'+(r.nickname||r.nome)+'<div class="sub">'+r.nome+' — '+(r.profissao||"—")+(r.empresa?" — "+r.empresa:"")+'</div></div>' +
+          '<div class="breakdown">' +
+            '<div class="row"><span>Venc. base</span><b>'+fmtEUR0(r.venc_base)+'</b></div>' +
+            '<div class="row"><span>Sub. Natal</span><b>'+fmtEUR0(r.sub_natal)+'</b></div>' +
+            '<div class="row"><span>Sub. Férias</span><b>'+fmtEUR0(r.sub_ferias)+'</b></div>' +
+            '<div class="row"><span>Sub. Alimentação</span><b>'+fmtEUR0(r.sub_alimentacao)+'</b></div>' +
+            '<div class="row"><span>Sub. Transporte</span><b>'+fmtEUR0(r.sub_transporte)+'</b></div>' +
+            '<div class="row"><span>IRS</span><b>'+fmtEUR0(r.irs)+'</b></div>' +
+            '<div class="row"><span>Taxa SS</span><b>'+fmtPct(r.ss_rate)+'</b></div>' +
+            '<div class="row"><span>Taxa TSU</span><b>'+fmtPct(r.tsu_rate)+'</b></div>' +
+            '<div class="row"><span>Custo SST</span><b>'+fmtEUR0(r.custo_sst)+'</b></div>' +
+            '<div class="row"><span>Custo Formação</span><b>'+fmtEUR0(r.custo_formacao)+'</b></div>' +
+            '<div class="row"><span>Custo Seguro</span><b>'+fmtEUR0(r.custo_seguro)+'</b></div>' +
+            '<div class="row"><span>Seguro</span><b>'+(r.seguro||"—")+'</b></div>' +
+            '<div class="row"><span>Valor real pago</span><b>'+fmtEUR0(r.valor_real)+'</b></div>' +
+            '<div class="row"><span>Dias/mês</span><b>'+(r.dias_mes!==null&&r.dias_mes!==undefined?r.dias_mes:"—")+'</b></div>' +
+          '</div>' +
+          '<div class="row tot"><span>Valor venda/dia</span><b>'+fmtEUR0(r.valor_venda_dia)+'</b></div>' +
+          '<div class="row tot"><span>Valor dia extra</span><b>'+fmtEUR0(r.valor_dia_extra)+'</b></div>' +
+          (r.ativo===false ? '<div class="row" style="margin-top:4px;"><span style="color:var(--ink-soft);font-style:italic;">inactivo</span></div>' : '') +
+        '</div>';
+      }).join("");
+    }catch(e){
+      console.error(e);
+      el.innerHTML = '<p style="color:var(--ink-soft);font-size:12px;">Erro ao carregar: '+(e&&e.message?e.message:"")+'</p>';
+    }
+  }
+  function closePayroll(){ document.getElementById("payrollOverlay").classList.remove("open"); }
+  document.getElementById("payrollBtn").onclick = openPayroll;
+  document.getElementById("closePayrollBtn").onclick = closePayroll;
+  document.getElementById("payrollOverlay").onclick = function(e){ if(e.target.id==="payrollOverlay") closePayroll(); };
 
   document.getElementById("advAddBtn").onclick = async function(){
     var w = document.getElementById("advWarn");
