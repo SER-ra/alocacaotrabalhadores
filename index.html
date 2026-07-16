@@ -31,6 +31,22 @@
 
   .topbar{background:var(--navy);color:#fff;padding:14px 20px;position:sticky;top:0;z-index:40;}
   .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .topbar-actions{display:flex;gap:8px;}
+  .topbar-actions .btn{white-space:nowrap;}
+  @media (max-width:520px){
+    .topbar-row{flex-direction:column;align-items:stretch;}
+    .topbar-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;}
+    .topbar-actions .btn{padding:9px 6px;font-size:12px;}
+  }
+
+  /* Desktop: cabeçalho + tabela ficam estáticos; só os cartões de resumo fazem scroll, num espaço próprio. */
+  @media (min-width:900px){
+    html, body{height:100%;overflow:hidden;}
+    #app{display:flex;flex-direction:column;height:100vh;}
+    #content{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+    #topSection{flex:0 0 auto;}
+    #summarySection{flex:1 1 auto;overflow-y:auto;min-height:0;padding-bottom:16px;}
+  }
   .brand{display:flex;flex-direction:column;line-height:1.1;}
   .brand .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#B0B0B0;font-weight:700;}
   .brand h1{font-size:19px;margin:2px 0 0;font-weight:800;letter-spacing:.01em;}
@@ -50,6 +66,7 @@
   .nav-group .label{font-weight:800;font-size:13.5px;letter-spacing:.02em;text-transform:capitalize;min-width:170px;text-align:center;}
 
   .legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 20px 0;font-size:11px;color:var(--ink-soft);}
+  .legend.obra-legend{padding-top:4px;font-weight:700;}
   .legend span{display:inline-flex;align-items:center;gap:5px;}
   .legend i{width:11px;height:11px;border-radius:3px;display:inline-block;}
 
@@ -205,10 +222,10 @@
         <span class="eyebrow">SER.RA · Construção</span>
         <h1>ALOCAÇÃO DE TRABALHADORES</h1>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-manage" id="manageBtn">Gerir obras/trabalhadores</button>
-        <button class="btn btn-manage" id="paymentsBtn">Adiantamentos</button>
-        <button class="btn btn-export" id="exportBtn">Exportar para Excel</button>
+      <div class="topbar-actions">
+        <button class="btn btn-manage" id="manageBtn" title="Gerir obras/trabalhadores">Gerir</button>
+        <button class="btn btn-manage" id="paymentsBtn" title="Adiantamentos">Adiantamentos</button>
+        <button class="btn btn-export" id="exportBtn" title="Exportar para Excel">Exportar</button>
         <button class="btn btn-manage" id="logoutBtn" title="Sair">Sair</button>
       </div>
     </div>
@@ -357,7 +374,7 @@
   window.addEventListener("resize", adjustBannerSpace);
   setTimeout(adjustBannerSpace, 0);
 
-  var WORKERS = ["ANTÓNIO","BERNADO","CAPUCHO","DANIEL","DANILO","DANNY","GIOVANNI","MBALA","PATRICK","SULEIMANE"];
+  var WORKERS = ["ANTÓNIO","BERNARDO","CAPUCHO","DANIEL","DANILO","DANNY","GIOVANNI","MBALA","PATRICK","SULEIMANE"];
   var OBRAS = [
     {code:"OB26-02", name:"Moradia Vigias da Arriba — Obras de Conservação"},
     {code:"OB25-01", name:"Estúdio Pilates Mafra"},
@@ -367,11 +384,28 @@
     {code:"P24-04", name:"Pinhal da Praia 2.0"},
     {code:"P23-07", name:"Prédio Marques Lésbio"}
   ];
-  // Valor diário por trabalhador (€) — editável em "Gerir obras/trabalhadores"
+  // Valor diário por trabalhador (€) — usado como reserva quando não há dados na tabela "trabalhadores"
+  // (fica editável em "Gerir obras/trabalhadores" para quem ainda não está nessa tabela, ex: Bilbao/Marques)
   var RATES = {
-    "ANTÓNIO": 125, "BERNADO": 140, "CAPUCHO": 125, "DANIEL": 110, "DANILO": 125,
+    "ANTÓNIO": 125, "BERNARDO": 140, "CAPUCHO": 125, "DANIEL": 110, "DANILO": 125,
     "DANNY": 125, "GIOVANNI": 95, "MBALA": 95, "PATRICK": 125, "SULEIMANE": 110
   };
+  // Valor do dia extra (€), quando diferente do valor normal — também pode vir da tabela "trabalhadores"
+  var EXTRA_RATES = {
+    "ANTÓNIO": 70, "BERNARDO": 100, "CAPUCHO": 70, "DANIEL": 60, "DANILO": 60,
+    "DANNY": 70, "GIOVANNI": 50, "MBALA": 50, "PATRICK": 60, "SULEIMANE": 60
+  };
+  // "BERNADO" (sem R) foi o nome usado nas primeiras semanas — isto garante que presenças
+  // já lançadas com o nome antigo continuam visíveis, mesmo depois da correcção para "BERNARDO".
+  var NAME_ALIASES = { "BERNARDO": "BERNADO" };
+  var FROM_TRABALHADORES = {}; // trabalhadores cujo valor vem da tabela "trabalhadores" (não editável aqui)
+  function rateFor(worker, status){
+    if(status === "EXTRA") return EXTRA_RATES[worker] || RATES[worker] || 0;
+    return RATES[worker] || 0;
+  }
+  function normName(s){
+    return String(s||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+  }
   function fmtEUR(v){
     try{ return new Intl.NumberFormat("pt-PT",{style:"currency",currency:"EUR"}).format(v); }
     catch(e){ return v.toFixed(2)+" €"; }
@@ -387,6 +421,36 @@
   var STATUS_COLOR_VAR = {"1DIA":"--c1","MEIODIA":"--c2","FALTA":"--c3","FERIAS":"--c4","EXTRA":"--c5"};
   function blockingStatus(st){ return st==="1DIA"||st==="FALTA"||st==="FERIAS"||st==="EXTRA"; }
   function emptyCounts(){ return {"1DIA":0,"MEIODIA":0,"FALTA":0,"FERIAS":0,"EXTRA":0}; }
+
+  // Paleta por obra — 1 DIA usa o tom cheio, 1/2 DIA usa o tom claro. Falta/Férias/Extra mantêm a cor combinada.
+  var OBRA_PALETTE = [
+    {full:"#4F8B5B", light:"#D3E6D7"}, // verde
+    {full:"#7B5EA7", light:"#E1D7ED"}, // roxo
+    {full:"#2F8E85", light:"#CDE6E3"}, // turquesa
+    {full:"#C97A2E", light:"#F1DAB9"}, // laranja
+    {full:"#B5567A", light:"#EED3DE"}, // rosa
+    {full:"#8A8A3C", light:"#E7E7BE"}, // oliva
+    {full:"#8B5E3C", light:"#E6D5C2"}  // castanho
+  ];
+  function obraColor(code){
+    var idx = OBRAS.findIndex(function(o){ return o.code === code; });
+    if(idx < 0) idx = 0;
+    return OBRA_PALETTE[idx % OBRA_PALETTE.length];
+  }
+  function entryBgColor(e){
+    if((e.status==="1DIA" || e.status==="MEIODIA" || e.status==="EXTRA") && e.obra){
+      var c = obraColor(e.obra);
+      return (e.status==="MEIODIA") ? c.light : c.full;
+    }
+    return "var(" + STATUS_COLOR_VAR[e.status] + ")";
+  }
+  function entryTextColor(e){
+    if(e.status==="MEIODIA" && e.obra) return "#2A2A2A";
+    return "#fff";
+  }
+  function entryBorderStyle(e){
+    return (e.status==="EXTRA") ? "box-shadow:inset 0 0 0 3px #000;" : "";
+  }
 
   var MONTH_NAMES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
   var MONTH_ABBR = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
@@ -486,7 +550,9 @@
   function getEntries(worker, date){
     var ym = ymKey(date), dk = dayKeyOf(date);
     var m = cache[ym]; if(!m) return [];
-    var w = m[worker]; if(!w) return [];
+    var w = m[worker];
+    if(!w && NAME_ALIASES[worker] && m[NAME_ALIASES[worker]]) w = m[NAME_ALIASES[worker]];
+    if(!w) return [];
     var arr = w[dk]; return Array.isArray(arr) ? arr : [];
   }
 
@@ -569,19 +635,28 @@
 
   // ---------- render principal ----------
   function legendHtml(){
-    return '<div class="legend">' + STATUS_ORDER.map(function(k){
-      return '<span><i style="background:var('+STATUS_COLOR_VAR[k]+')"></i>'+STATUS[k].label+'</span>';
+    var fixedRow = '<div class="legend">' +
+      '<span><i style="background:linear-gradient(135deg,#4F8B5B 50%,#D3E6D7 50%)"></i>Cor da obra = 1 dia · tom claro = 1/2 dia</span>' +
+      '<span><i style="background:var(--c3)"></i>Falta</span>' +
+      '<span><i style="background:var(--c4)"></i>Férias</span>' +
+      '<span><i style="background:#8A8A8A;box-shadow:inset 0 0 0 2px #000;"></i>Dia Extra (cor da obra + contorno preto)</span>' +
+      '</div>';
+    var obraRow = '<div class="legend obra-legend">' + OBRAS.map(function(o){
+      return '<span><i style="background:'+obraColor(o.code).full+'"></i>'+o.code+'</span>';
     }).join("") + '</div>';
+    return fixedRow + obraRow;
   }
 
   function cellInnerHtml(entries){
     if(entries.length === 0) return '<div class="cell-half empty">·</div>';
     if(entries.length === 1){
       var e = entries[0];
-      return '<div class="cell-half '+STATUS[e.status].cls+'">'+(e.obra||"—")+(e.note?' <span class="note-mark">✎</span>':'')+'</div>';
+      return '<div class="cell-half" style="background:'+entryBgColor(e)+';color:'+entryTextColor(e)+';'+entryBorderStyle(e)+'">'+
+        (e.obra||"—")+(e.note?' <span class="note-mark">✎</span>':'')+'</div>';
     }
     return entries.slice(0,2).map(function(e){
-      return '<div class="cell-half '+STATUS[e.status].cls+'">'+(e.obra||"—")+(e.note?' <span class="note-mark">✎</span>':'')+'</div>';
+      return '<div class="cell-half" style="background:'+entryBgColor(e)+';color:'+entryTextColor(e)+';'+entryBorderStyle(e)+'">'+
+        (e.obra||"—")+(e.note?' <span class="note-mark">✎</span>':'')+'</div>';
     }).join("");
   }
 
@@ -647,31 +722,33 @@
     var el = document.getElementById("obraCards");
     el.innerHTML = OBRAS.map(function(o){
       var perWorker = {};
+      var perWorkerCost = {};
       var totalObra = 0;
       var totalCost = 0;
       WORKERS.forEach(function(w){
-        var t = 0;
+        var t = 0, c = 0, hasRate = false;
         dates.forEach(function(d){
           getEntries(w,d).forEach(function(e){
             if(e.obra !== o.code) return;
-            if(e.status==="1DIA") t += 1;
-            else if(e.status==="MEIODIA") t += 0.5;
-            else if(e.status==="EXTRA") t += 1;
+            var r = rateFor(w, e.status);
+            if(r) hasRate = true;
+            if(e.status==="1DIA"){ t += 1; c += r; }
+            else if(e.status==="MEIODIA"){ t += 0.5; c += r*0.5; }
+            else if(e.status==="EXTRA"){ t += 1; c += r; }
           });
         });
         if(t>0){
-          perWorker[w]=t; totalObra += t;
-          var rate = RATES[w] || 0;
-          totalCost += t*rate;
+          perWorker[w]=t; perWorkerCost[w]=hasRate?c:null; totalObra += t;
+          totalCost += c;
         }
       });
       var rows = Object.keys(perWorker).sort(function(a,b){return perWorker[b]-perWorker[a];})
         .map(function(w){
-          var rate = RATES[w];
-          var costTxt = rate ? '<i>'+fmtEUR(perWorker[w]*rate)+'</i>' : '<i class="no-rate">sem valor</i>';
+          var c = perWorkerCost[w];
+          var costTxt = (c!==null) ? '<i>'+fmtEUR(c)+'</i>' : '<i class="no-rate">sem valor</i>';
           return '<div class="row"><span>'+w+'</span><span class="wv"><b>'+perWorker[w]+'</b>'+costTxt+'</span></div>';
         }).join("");
-      return '<div class="scard"><div class="name">'+o.code+'<div class="sub">'+o.name+'</div></div>'+
+      return '<div class="scard" style="border-top:3px solid '+obraColor(o.code).full+';"><div class="name">'+o.code+'<div class="sub">'+o.name+'</div></div>'+
         (rows ? '<div class="breakdown">'+rows+'</div>' : '<div class="empty-hint">sem dias registados</div>')+
         '<div class="row tot"><span>Total Homens</span><b>'+totalObra+'</b></div>'+
         '<div class="row tot"><span>Total Gasto</span><b>'+fmtEUR(totalCost)+'</b></div></div>';
@@ -694,10 +771,12 @@
     var savedPageY = sameMode ? window.scrollY : 0;
 
     var content = document.getElementById("content");
-    content.innerHTML = legendHtml() +
-      '<div class="grid-wrap" id="gridWrap"></div>' +
-      '<div class="summary-wrap"><h3>Totais por trabalhador</h3><div class="summary-cards" id="workerCards"></div></div>' +
-      '<div class="summary-wrap"><h3>Totais por obra</h3><div class="summary-cards" id="obraCards"></div></div>';
+    content.innerHTML =
+      '<div id="topSection">' + legendHtml() + '<div class="grid-wrap" id="gridWrap"></div></div>' +
+      '<div id="summarySection">' +
+        '<div class="summary-wrap"><h3>Totais por trabalhador</h3><div class="summary-cards" id="workerCards"></div></div>' +
+        '<div class="summary-wrap"><h3>Totais por obra</h3><div class="summary-cards" id="obraCards"></div></div>' +
+      '</div>';
 
     var newWrap = document.getElementById("gridWrap");
     var workerColW = 104;
@@ -740,7 +819,7 @@
       return;
     }
     el.innerHTML = entries.map(function(e,idx){
-      return '<div class="entry-row"><span><span class="tag" style="background:var('+STATUS_COLOR_VAR[e.status]+')"></span>'+
+      return '<div class="entry-row"><span><span class="tag" style="background:'+entryBgColor(e)+'"></span>'+
         (e.obra||"Sem obra")+' — '+STATUS[e.status].label+
         (e.note ? '<br><i style="color:var(--ink-soft);font-size:10.5px;">"'+escapeHtml(e.note)+'"</i>' : '')+
         '</span>'+
@@ -841,14 +920,17 @@
     var monthDates = getDatesForMonth(anchorDate.getFullYear(), anchorDate.getMonth());
     var el = document.getElementById("paymentsSummary");
     el.innerHTML = WORKERS.map(function(w){
-      var days = 0;
+      var days = 0, earned = 0, hasRate = false;
       monthDates.forEach(function(d){
         getEntries(w,d).forEach(function(e){
-          if(e.status==="1DIA") days+=1; else if(e.status==="MEIODIA") days+=0.5; else if(e.status==="EXTRA") days+=1;
+          var r = rateFor(w, e.status);
+          if(r) hasRate = true;
+          if(e.status==="1DIA"){ days+=1; earned+=r; }
+          else if(e.status==="MEIODIA"){ days+=0.5; earned+=r*0.5; }
+          else if(e.status==="EXTRA"){ days+=1; earned+=r; }
         });
       });
-      var rate = RATES[w];
-      var earned = rate ? days*rate : null;
+      earned = hasRate ? earned : null;
       var advances = getAdvances(ym, w);
       var advTotal = totalAdvances(ym, w);
       var advRows = advances.map(function(a,idx){
@@ -924,9 +1006,12 @@
     var wl = document.getElementById("workerList");
     wl.innerHTML = WORKERS.map(function(w){
       var rate = RATES[w] || "";
+      var locked = !!FROM_TRABALHADORES[w];
       return '<div class="manage-item"><span>'+w+'</span>'+
         '<span style="display:flex;align-items:center;gap:6px;">'+
-        '<input type="number" step="0.01" min="0" class="rate-edit" data-name="'+w+'" value="'+rate+'" placeholder="€/dia" style="width:80px;">'+
+        (locked
+          ? '<span style="font-size:11px;color:var(--ink-soft);" title="Gerido na Ficha de Trabalhadores">'+fmtEUR(rate)+' 🔒</span>'
+          : '<input type="number" step="0.01" min="0" class="rate-edit" data-name="'+w+'" value="'+rate+'" placeholder="€/dia" style="width:80px;">')+
         '<button class="rm" data-name="'+w+'">✕</button></span></div>';
     }).join("");
     wl.querySelectorAll(".rm").forEach(function(b){ b.onclick=function(){ removeWorker(b.getAttribute("data-name")); }; });
@@ -1036,14 +1121,17 @@
         var tot = 0;
         var cost = 0;
         WORKERS.forEach(function(w){
-          var t = 0;
+          var t = 0, c = 0;
           dates.forEach(function(d){
             getEntries(w,d).forEach(function(e){
               if(e.obra!==o.code) return;
-              if(e.status==="1DIA") t+=1; else if(e.status==="MEIODIA") t+=0.5; else if(e.status==="EXTRA") t+=1;
+              var r = rateFor(w, e.status);
+              if(e.status==="1DIA"){ t+=1; c+=r; }
+              else if(e.status==="MEIODIA"){ t+=0.5; c+=r*0.5; }
+              else if(e.status==="EXTRA"){ t+=1; c+=r; }
             });
           });
-          row.push(t); tot += t; cost += t*(RATES[w]||0);
+          row.push(t); tot += t; cost += c;
         });
         row.push(tot, Number(cost.toFixed(2)));
         oRows.push(row);
@@ -1062,14 +1150,15 @@
       var ymAnchor = ymKey(anchorDate);
       var pRows = [["Trabalhador","Dias no Mês","Valor Ganho (€)","Adiantado (€)","A Pagar (€)"]];
       WORKERS.forEach(function(w){
-        var days = 0;
+        var days = 0, earned = 0;
         monthDates.forEach(function(d){
           getEntries(w,d).forEach(function(e){
-            if(e.status==="1DIA") days+=1; else if(e.status==="MEIODIA") days+=0.5; else if(e.status==="EXTRA") days+=1;
+            var r = rateFor(w, e.status);
+            if(e.status==="1DIA"){ days+=1; earned+=r; }
+            else if(e.status==="MEIODIA"){ days+=0.5; earned+=r*0.5; }
+            else if(e.status==="EXTRA"){ days+=1; earned+=r; }
           });
         });
-        var rate = RATES[w];
-        var earned = rate ? days*rate : 0;
         var adv = totalAdvances(ymAnchor, w);
         pRows.push([w, days, Number(earned.toFixed(2)), Number(adv.toFixed(2)), Number((earned-adv).toFixed(2))]);
       });
@@ -1093,10 +1182,42 @@
   };
 
   // ---------- autenticação ----------
+  async function migrateWorkerNames(){
+    var idx = WORKERS.indexOf("BERNADO");
+    if(idx !== -1 && WORKERS.indexOf("BERNARDO") === -1){
+      WORKERS[idx] = "BERNARDO";
+      await saveConfig();
+    }
+  }
+
+  async function loadTrabalhadoresRates(){
+    if(!sbReady) return;
+    try{
+      var res = await sb.from("trabalhadores").select("nickname,valor_venda_dia,valor_dia_extra,ativo").eq("ativo", true);
+      if(res.error) throw res.error;
+      if(!res.data) return;
+      res.data.forEach(function(row){
+        var nick = normName(row.nickname);
+        var match = WORKERS.find(function(w){ return normName(w) === nick; });
+        if(!match) return; // trabalhador na ficha mas ainda não na lista de presenças — não força nada
+        if(row.valor_venda_dia !== null && row.valor_venda_dia !== undefined) RATES[match] = Number(row.valor_venda_dia);
+        if(row.valor_dia_extra !== null && row.valor_dia_extra !== undefined) EXTRA_RATES[match] = Number(row.valor_dia_extra);
+        FROM_TRABALHADORES[match] = true;
+      });
+    }catch(e){
+      console.error("Erro ao ler tabela trabalhadores:", e);
+      // silencioso de propósito: se a tabela ainda não existir, a app continua a funcionar com os valores de reserva
+    }
+  }
+
   async function showApp(){
     document.getElementById("loginScreen").classList.add("hidden");
     document.getElementById("app").style.display = "";
-    if(sbReady) await loadConfig();
+    if(sbReady){
+      await loadConfig();
+      await migrateWorkerNames();
+      await loadTrabalhadoresRates();
+    }
     await render();
   }
   function showLogin(msg){
