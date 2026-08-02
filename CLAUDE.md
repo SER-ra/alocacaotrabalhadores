@@ -22,7 +22,7 @@ Aplicação web interna da **SER.RA** (empresa de construção, zona de Sintra/L
 
 - **Frontend:** HTML/CSS/JavaScript vanilla, historicamente num único ficheiro HTML. Sem framework, sem build step.
 - **Backend/BD:** Supabase (projecto SER.RA — atenção: existiu confusão com outro projecto Supabase chamado "Personal Trainer"; confirmar sempre que se está a trabalhar no projecto certo antes de correr SQL ou migrações).
-- **Hosting:** GitHub Pages (ser-ra.github.io). Deploy = push para o branch publicado.
+- **Hosting:** GitHub Pages — repo público `ser-ra/alocacaotrabalhadores`, publicado em https://ser-ra.github.io/alocacaotrabalhadores/. Deploy = push para `main` (⚠️ o repo é PÚBLICO — nunca commitar segredos nem dados pessoais).
 - **Domínio:** ser-ra.pt gerido em PowerDNS; www aponta por CNAME para Vercel (site institucional — NÃO é esta app).
 
 > ⚠️ **VERIFICAR SEMPRE:** a secção seguinte foi preenchida via MCP do Supabase em 2026-08-02; antes de qualquer alteração à BD, reconfirmar via MCP que o esquema não mudou entretanto. Não assumir nomes de memória.
